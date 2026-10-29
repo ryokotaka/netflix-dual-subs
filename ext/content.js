@@ -293,19 +293,26 @@
   async function pumpTranslations() {
     if (!S.translator || S.translating || S.jaSource !== 'machine') return;
     S.translating = true;
+    const cues = S.cues;
+    let stale = false;
     try {
       for (;;) {
         const from = Math.max(0, S.idx);
-        let k = S.cues.findIndex((c, j) => j >= from && !c.ja);
-        if (k < 0) k = S.cues.findIndex(c => !c.ja);
+        let k = cues.findIndex((c, j) => j >= from && !c.ja);
+        if (k < 0) k = cues.findIndex(c => !c.ja);
         if (k < 0) break;
-        const c = S.cues[k];
-        c.ja = await S.translator.translate(c.en.replace(/\n/g, ' ')) || ' ';
+        const c = cues[k];
+        const ja = await S.translator.translate(c.en.replace(/\n/g, ' ')) || ' ';
+        // the movie changed while translating: drop the result and start over on the new cues
+        if (S.cues !== cues) { stale = true; break; }
+        c.ja = ja;
+        k = cues.indexOf(c); // DOM mode may have re-sorted the list in the meantime
         updateRowJa(k);
         if (k === S.idx) subJa.textContent = c.ja;
       }
     } catch (e) { console.warn('[NDS] translate', e); }
     S.translating = false;
+    if (stale) pumpTranslations();
   }
 
   // ---------- hover dictionary ----------
