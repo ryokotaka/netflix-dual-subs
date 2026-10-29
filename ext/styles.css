@@ -51,8 +51,9 @@ html.nds-hide-nf .player-timedtext { opacity: 0 !important; }
 
 /* ---- side panel ---- */
 #nds-panel {
-  position: fixed; top: 0; right: 0; bottom: 0; width: 340px; z-index: 2147483001;
-  background: var(--nds-bg); border-left: 1px solid var(--nds-line);
+  /* stop above Netflix's control bar so next-episode / subtitles / fullscreen stay clickable */
+  position: fixed; top: 0; right: 0; bottom: 100px; width: 340px; z-index: 2147483001;
+  background: var(--nds-bg); border-left: 1px solid var(--nds-line); border-bottom-left-radius: 10px;
   display: none; flex-direction: column; font-size: 14px;
 }
 #nds-root.nds-panel-on #nds-panel { display: flex; }

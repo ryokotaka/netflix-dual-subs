@@ -65,6 +65,45 @@
     return value;
   };
 
+  // Netflix's player no longer runs the manifest through window.JSON.parse, so also
+  // read the parsed manifest from the player's own state: find the segment whose
+  // movieId is the current /watch/ id and take its parsedManifest.timedTextTrackList.
+  function findSegment(root, movieId) {
+    const seen = new Set(), queue = [[root, 0]];
+    while (queue.length && seen.size < 20000) {
+      const [o, d] = queue.shift();
+      if (!o || typeof o !== 'object' || seen.has(o) || o instanceof Node || o === window) continue;
+      seen.add(o);
+      if (String(o.movieId) === movieId && o.parsedManifest && Array.isArray(o.parsedManifest.timedTextTrackList)) return o;
+      if (d >= 12) continue;
+      let keys; try { keys = Object.keys(o); } catch (e) { continue; }
+      for (const k of keys.slice(0, 400)) { try { queue.push([o[k], d + 1]); } catch (e) { /* getter threw */ } }
+    }
+    return null;
+  }
+
+  let sentFor = '';
+  setInterval(() => {
+    const m = location.pathname.match(/\/watch\/(\d+)/);
+    if (!m || sentFor === m[1]) return;
+    try {
+      const seg = findSegment(window.netflix.appContext.state.playerApp.getState().videoPlayer, m[1]);
+      if (!seg) return;
+      const tracks = seg.parsedManifest.timedTextTrackList
+        .filter(t => !t.none && !t.isImageBased && t.profile && t.urls && t.urls.length)
+        .map(t => ({
+          lang: t.bcp47 || '',
+          label: t.displayName || '',
+          type: String(t.rawTrackType || '').toLowerCase(),
+          forced: !!t.forced,
+          urls: { [t.profile]: t.urls[0].url },
+        }));
+      if (!tracks.length) return;
+      sentFor = m[1];
+      window.postMessage({ __nds: 'tracks', movieId: m[1], tracks }, '*');
+    } catch (e) { /* player not ready yet */ }
+  }, 1000);
+
   function player() {
     try {
       const vp = window.netflix.appContext.state.playerApp.getAPI().videoPlayer;
