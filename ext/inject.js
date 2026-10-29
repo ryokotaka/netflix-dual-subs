@@ -82,10 +82,14 @@
     return null;
   }
 
-  let sentFor = '';
+  // Some tracks (often Japanese) get their URLs a few seconds after the others,
+  // so keep looking for a minute and resend whenever more tracks have URLs.
+  let sent = { id: '', n: 0, tries: 0 };
   setInterval(() => {
     const m = location.pathname.match(/\/watch\/(\d+)/);
-    if (!m || sentFor === m[1]) return;
+    if (!m) return;
+    if (sent.id !== m[1]) sent = { id: m[1], n: 0, tries: 0 };
+    if (++sent.tries > 60) return;
     try {
       const seg = findSegment(window.netflix.appContext.state.playerApp.getState().videoPlayer, m[1]);
       if (!seg) return;
@@ -98,8 +102,9 @@
           forced: !!t.forced,
           urls: { [t.profile]: t.urls[0].url },
         }));
-      if (!tracks.length) return;
-      sentFor = m[1];
+      if (tracks.length <= sent.n) return;
+      sent.n = tracks.length;
+      console.log('[NDS] tracks', m[1], tracks.filter(t => /^(en|ja)/i.test(t.lang)).map(t => `${t.lang}/${t.type}${t.forced ? '/forced' : ''}`).join(' '));
       window.postMessage({ __nds: 'tracks', movieId: m[1], tracks }, '*');
     } catch (e) { /* player not ready yet */ }
   }, 1000);

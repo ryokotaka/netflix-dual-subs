@@ -7,8 +7,9 @@
     tracksByMovie: {},
     lastTracksMovie: null,
     movieId: null,
-    cues: [],          // {start, end, en, ja}
+    cues: [],          // {start, end, en, ja (shown), jaNf (Netflix's), jaMt (machine)}
     jaSource: 'none',  // 'netflix' | 'machine' | 'none'
+    hasOfficialJa: false,
     source: 'none',    // 'track' | 'dom'
     idx: -1,
     pausedAt: -1,
@@ -18,13 +19,17 @@
     translating: false,
     status: '',
     saved: [],
-    settings: { showJa: true, hideNetflix: true, autoPause: false, hoverPause: true, panel: true },
+    settings: { showJa: true, jaOfficial: false, hideNetflix: true, autoPause: false, hoverPause: true, panel: true },
     userScrollAt: 0,
   };
 
   // ---------- storage ----------
-  const saveSettings = () => chrome.storage.local.set({ nds_settings: S.settings });
-  const saveSaved = () => chrome.storage.local.set({ nds_saved: S.saved });
+  // After the extension is reloaded, a content script left in an open tab loses chrome.*
+  // until the page is reloaded; say so instead of throwing.
+  const alive = () => { try { return !!chrome.runtime.id; } catch (e) { return false; } };
+  const orphaned = () => { setStatus('拡張機能が更新されました。ページを再読み込みしてください'); return false; };
+  const saveSettings = () => alive() ? chrome.storage.local.set({ nds_settings: S.settings }) : orphaned();
+  const saveSaved = () => alive() ? chrome.storage.local.set({ nds_saved: S.saved }) : orphaned();
 
   fetch(chrome.runtime.getURL('dict.json')).then(r => r.json()).then(d => { S.dict = d; });
 
@@ -36,7 +41,7 @@
   const watchId = () => { const m = location.pathname.match(/\/watch\/(\d+)/); return m ? m[1] : null; };
   const fmt = ms => { const s = Math.floor(ms / 1000); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
   const seek = ms => window.postMessage({ __nds: 'seek', ms }, '*');
-  const fetchText = url => new Promise((res, rej) =>
+  const fetchText = url => !alive() ? (orphaned(), Promise.reject(new Error('extension reloaded'))) : new Promise((res, rej) =>
     chrome.runtime.sendMessage({ type: 'fetchText', url }, r => (r && r.ok ? res(r.text) : rej(new Error(r ? r.error : 'no response')))));
 
   // ---------- UI ----------
@@ -54,6 +59,7 @@
       </div>
       <div class="nds-settings" hidden>
         <label><input type="checkbox" data-k="showJa"> 日本語訳を表示</label>
+        <label><input type="checkbox" data-k="jaOfficial"> Netflix公式の日本語字幕を使う（意訳・省略あり）</label>
         <label><input type="checkbox" data-k="hideNetflix"> Netflixの字幕を隠す</label>
         <label><input type="checkbox" data-k="autoPause"> 1文ごとに自動一時停止 (Q)</label>
         <label><input type="checkbox" data-k="hoverPause"> 単語にカーソルで一時停止</label>
@@ -85,6 +91,7 @@
   settingsBox.addEventListener('change', e => {
     const k = e.target.dataset.k; if (!k) return;
     S.settings[k] = e.target.checked; saveSettings(); applySettings();
+    if (k === 'jaOfficial') applyJaMode();
   });
   $('.nds-gear', root).onclick = () => { settingsBox.hidden = !settingsBox.hidden; };
   $('.nds-close', root).onclick = () => togglePanel(false);
@@ -181,12 +188,15 @@
     if (!movieId || !tracks.length) return;
     S.tracksByMovie[movieId] = tracks;
     S.lastTracksMovie = movieId;
-    if (S.movieId === movieId && S.source !== 'track') loadTracks(movieId);
+    if (S.movieId !== movieId || S.loadingId === movieId) return;
+    if (S.source !== 'track') loadTracks(movieId);
+    // the Japanese track can get its URL after the English one: pick it up late
+    else if (!S.hasOfficialJa) loadJa(movieId).then(ok => { if (ok && S.settings.jaOfficial) applyJaMode(); });
   });
 
   let domTimer = null;
   function startMovie(id) {
-    S.movieId = id; S.cues = []; S.idx = -1; S.source = 'none'; S.jaSource = 'none'; S.pausedAt = -1;
+    S.movieId = id; S.cues = []; S.idx = -1; S.source = 'none'; S.jaSource = 'none'; S.hasOfficialJa = false; S.pausedAt = -1;
     list.innerHTML = ''; renderSub(); applySettings();
     setStatus('字幕を読み込み中…');
     clearTimeout(domTimer);
@@ -213,30 +223,44 @@
   }
 
   async function loadTracks(id) {
-    const tracks = S.tracksByMovie[id];
+    S.loadingId = id;
     try {
-      const en = await loadSub(pickTrack(tracks, 'en'));
+      const en = await loadSub(pickTrack(S.tracksByMovie[id], 'en'));
       if (S.movieId !== id) return;
       if (!en) { setStatus('この作品は英語字幕が見つかりませんでした'); return; }
       S.cues = en.map(c => ({ start: c.start, end: c.end, en: c.text, ja: '' }));
       S.source = 'track';
-      let ja = null;
-      try { ja = await loadSub(pickTrack(tracks, 'ja')); } catch (e) { /* fall back to machine translation */ }
+      const ja = await loadJa(id);
       if (S.movieId !== id) return;
-      if (ja) {
-        N.alignCues(en, ja).forEach((t, k) => { S.cues[k].ja = t; });
-        S.jaSource = 'netflix';
-        setStatus('');
-      } else {
-        S.jaSource = 'machine';
-        setStatus('日本語字幕がないため、Chrome内蔵の翻訳を使います');
-        initTranslator(false);
-      }
-      S.idx = -1; renderList(); applySettings();
+      setStatus(!ja && S.settings.jaOfficial ? 'Netflixの日本語字幕がないため、Chrome内蔵の翻訳を使います' : '');
+      applyJaMode(); applySettings();
     } catch (e) {
       console.warn('[NDS] subtitle load failed', e);
       setStatus('字幕の取得に失敗しました。ページを再読み込みしてください');
+    } finally {
+      if (S.loadingId === id) S.loadingId = null;
     }
+  }
+
+  // Loads Netflix's Japanese subtitles into cue.jaNf; false when there are none (yet).
+  async function loadJa(id) {
+    let ja = null;
+    try { ja = await loadSub(pickTrack(S.tracksByMovie[id], 'ja')); } catch (e) { /* machine translation still works */ }
+    if (!ja || S.movieId !== id || S.source !== 'track') return false;
+    N.alignCues(S.cues, ja).forEach((t, k) => { S.cues[k].jaNf = t; });
+    S.hasOfficialJa = true;
+    return true;
+  }
+
+  // Which Japanese to show: Netflix's official subtitles (natural but condensed) or
+  // Chrome's machine translation (stiffer but follows the English line by line).
+  function applyJaMode() {
+    if (S.source !== 'track') return;
+    const official = S.settings.jaOfficial && S.hasOfficialJa;
+    S.jaSource = official ? 'netflix' : 'machine';
+    S.cues.forEach(c => { c.ja = (official ? c.jaNf : c.jaMt) || ''; });
+    S.idx = -1; renderList(); renderSub();
+    if (!official) initTranslator(false);
   }
 
   // Fallback: read the lines Netflix itself renders (works without the track list,
@@ -290,6 +314,16 @@
     }
   }
 
+  // Dialogue cues ("-Hi.\n-Hey.") are translated one speaker at a time; other
+  // multi-line cues are a single sentence wrapped, so translate them joined.
+  async function translateCue(en) {
+    const lines = en.split('\n');
+    if (lines.length < 2 || !lines.every(l => /^\s*-/.test(l))) return S.translator.translate(lines.join(' '));
+    const out = [];
+    for (const l of lines) out.push(await S.translator.translate(l));
+    return out.join('\n');
+  }
+
   async function pumpTranslations() {
     if (!S.translator || S.translating || S.jaSource !== 'machine') return;
     S.translating = true;
@@ -298,13 +332,15 @@
     try {
       for (;;) {
         const from = Math.max(0, S.idx);
-        let k = cues.findIndex((c, j) => j >= from && !c.ja);
-        if (k < 0) k = cues.findIndex(c => !c.ja);
+        let k = cues.findIndex((c, j) => j >= from && !c.jaMt);
+        if (k < 0) k = cues.findIndex(c => !c.jaMt);
         if (k < 0) break;
         const c = cues[k];
-        const ja = await S.translator.translate(c.en.replace(/\n/g, ' ')) || ' ';
+        const ja = await translateCue(c.en) || ' ';
         // the movie changed while translating: drop the result and start over on the new cues
         if (S.cues !== cues) { stale = true; break; }
+        c.jaMt = ja;
+        if (S.jaSource !== 'machine') break; // switched to Netflix's Japanese meanwhile
         c.ja = ja;
         k = cues.indexOf(c); // DOM mode may have re-sorted the list in the meantime
         updateRowJa(k);
@@ -432,7 +468,7 @@
   chrome.storage.local.get(['nds_settings', 'nds_saved'], r => {
     Object.assign(S.settings, r.nds_settings || {});
     S.saved = r.nds_saved || [];
-    applySettings();
+    applySettings(); applyJaMode();
   });
   applySettings();
 })();
