@@ -15,6 +15,23 @@
       .split('\n').map(l => l.trim()).filter(Boolean).join('\n');
   }
 
+  // Closed captions also carry sound descriptions ("[sighs]", "(laughs)"), speaker
+  // labels ("[Ginny] What?", "NORAH: Hi") and song lyrics ("♪ Go down ♪").
+  // Keeps only the spoken words; '' when nothing is left.
+  function stripSdh(text) {
+    const lines = text.split('\n').map(line => {
+      const dash = /^\s*-/.test(line) ? '-' : '';
+      let l = line.replace(/^\s*-\s*/, '');
+      if (/[♪♫]/.test(l)) return '';
+      l = l.replace(/\[[^\]]*\]|\([^)]*\)/g, ' ')
+        .replace(/^\s*[A-Z][A-Z0-9 .'-]{1,24}:\s*/, '')
+        .replace(/\s{2,}/g, ' ').trim();
+      return /[A-Za-z0-9]/.test(l) ? dash + l : '';
+    }).filter(Boolean);
+    if (lines.length === 1) lines[0] = lines[0].replace(/^-\s*/, ''); // the other speaker was only a sound
+    return lines.join('\n');
+  }
+
   function parseClock(t, tickRate) {
     t = String(t).trim();
     let m;
@@ -190,7 +207,7 @@
     return best;
   }
 
-  const api = { parseVTT, parseTTML, parseSubtitles, alignCues, tokenize, lemmas, lookupWord, lookupPhrase, cleanText };
+  const api = { parseVTT, parseTTML, parseSubtitles, alignCues, tokenize, lemmas, lookupWord, lookupPhrase, cleanText, stripSdh };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.NDS = api;
 })(typeof self !== 'undefined' ? self : this);

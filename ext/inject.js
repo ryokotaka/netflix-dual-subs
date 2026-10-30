@@ -1,72 +1,14 @@
 // Runs in the page's own JavaScript world (MAIN) at document_start.
-// 1) Asks Netflix for text-based subtitle formats and passes the subtitle track
-//    list to the extension.  2) Seeks the Netflix player on request
-//    (setting video.currentTime directly makes Netflix's player error out).
+// 1) Passes the subtitle track list (read from Netflix's player state) to the
+//    extension.  2) Seeks the Netflix player on request (setting video.currentTime
+//    directly makes Netflix's player error out).
+// It no longer hooks JSON.stringify / JSON.parse: Netflix's player doesn't pass the
+// manifest through them any more, and rewriting its requests (adding subtitle profiles)
+// was a suspect for the player sometimes hanging on the first load.
 (function () {
   'use strict';
-  const TEXT_PROFILES = ['webvtt-lssdh-ios8', 'dfxp-ls-sdh', 'simplesdh', 'imsc1.1'];
 
-  const origStringify = JSON.stringify;
-  JSON.stringify = function (value) {
-    try {
-      const targets = [value, value && value.params];
-      for (const t of targets) {
-        if (t && Array.isArray(t.profiles) && t.profiles.some(p => typeof p === 'string')) {
-          for (const p of TEXT_PROFILES) if (!t.profiles.includes(p)) t.profiles.push(p);
-        }
-      }
-    } catch (e) { /* never break Netflix */ }
-    return origStringify.apply(this, arguments);
-  };
-
-  function urlsOf(dl) {
-    if (!dl) return [];
-    if (dl.downloadUrls) return Object.values(dl.downloadUrls);
-    if (Array.isArray(dl.urls)) return dl.urls.map(u => (typeof u === 'string' ? u : u.url)).filter(Boolean);
-    return [];
-  }
-
-  function findTracks(obj, depth) {
-    if (!obj || typeof obj !== 'object' || depth > 4) return null;
-    if (Array.isArray(obj.timedtexttracks)) return obj;
-    for (const k of ['result', 'results', 'data']) {
-      const r = obj[k] && findTracks(obj[k], depth + 1);
-      if (r) return r;
-    }
-    return null;
-  }
-
-  const origParse = JSON.parse;
-  JSON.parse = function () {
-    const value = origParse.apply(this, arguments);
-    try {
-      const m = findTracks(value, 0);
-      if (m) {
-        const tracks = m.timedtexttracks
-          .filter(t => !t.isNoneTrack && t.ttDownloadables)
-          .map(t => {
-            const urls = {};
-            for (const p of Object.keys(t.ttDownloadables)) {
-              const u = urlsOf(t.ttDownloadables[p]);
-              if (u.length) urls[p] = u[0];
-            }
-            return {
-              lang: t.language || t.bcp47 || '',
-              label: t.languageDescription || '',
-              type: t.rawTrackType || t.trackType || '',
-              forced: !!t.isForcedNarrative,
-              urls,
-            };
-          })
-          .filter(t => Object.keys(t.urls).length);
-        window.postMessage({ __nds: 'tracks', movieId: String(m.movieId || ''), tracks }, '*');
-      }
-    } catch (e) { /* ignore */ }
-    return value;
-  };
-
-  // Netflix's player no longer runs the manifest through window.JSON.parse, so also
-  // read the parsed manifest from the player's own state: find the segment whose
+  // Read the parsed manifest from the player's own state: find the segment whose
   // movieId is the current /watch/ id and take its parsedManifest.timedTextTrackList.
   function findSegment(root, movieId) {
     const seen = new Set(), queue = [[root, 0]];
@@ -88,6 +30,7 @@
   setInterval(() => {
     const m = location.pathname.match(/\/watch\/(\d+)/);
     if (!m) return;
+    if (!document.querySelector('video')) return; // leave the player alone until it has started
     if (sent.id !== m[1]) sent = { id: m[1], n: 0, tries: 0 };
     if (++sent.tries > 60) return;
     try {

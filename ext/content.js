@@ -20,7 +20,7 @@
     translating: false,
     status: '',
     saved: [],
-    settings: { showJa: true, jaBlur: true, jaBottom: false, jaOfficial: false, hideNetflix: true, autoPause: false, hoverPause: true, panel: true },
+    settings: { subSize: '1', subPos: '9', hideSdh: true, showJa: true, jaBlur: true, jaBottom: false, jaOfficial: false, hideNetflix: true, autoPause: false, hoverPause: true, panel: true },
     userScrollAt: 0,
   };
 
@@ -30,7 +30,7 @@
   const alive = () => { try { return !!chrome.runtime.id; } catch (e) { return false; } };
   const orphaned = () => { setStatus('拡張機能が更新されました。ページを再読み込みしてください'); return false; };
   const saveSettings = () => alive() ? chrome.storage.local.set({ nds_settings: S.settings }) : orphaned();
-  const saveSaved = () => alive() ? chrome.storage.local.set({ nds_saved: S.saved }) : orphaned();
+  const saveSaved = () => { refreshSavedWords(); return alive() ? chrome.storage.local.set({ nds_saved: S.saved }) : orphaned(); };
 
   fetch(chrome.runtime.getURL('dict.json')).then(r => r.json()).then(d => { S.dict = d; });
 
@@ -54,11 +54,13 @@
       <div class="nds-head">
         <button data-tab="subs" class="on">字幕</button>
         <button data-tab="saved">保存</button>
+        <button data-tab="quiz">復習<span class="nds-due"></span></button>
         <span class="nds-sp"></span>
         <button class="nds-gear" title="設定">⚙</button>
         <button class="nds-close" title="パネルを閉じる">✕</button>
       </div>
       <div class="nds-settings" hidden>
+        <label><input type="checkbox" data-k="hideSdh"> 効果音・話者名・歌詞を隠す（[laughs] など）</label>
         <label><input type="checkbox" data-k="showJa"> 日本語訳を表示</label>
         <label><input type="checkbox" data-k="jaBlur"> 右の日本語をぼかす（カーソルを合わせると表示）</label>
         <label><input type="checkbox" data-k="jaBottom"> 動画の下の字幕にも日本語を出す</label>
@@ -66,18 +68,21 @@
         <label><input type="checkbox" data-k="hideNetflix"> Netflixの字幕を隠す</label>
         <label><input type="checkbox" data-k="autoPause"> 1文ごとに自動一時停止 (Q)</label>
         <label><input type="checkbox" data-k="hoverPause"> 単語にカーソルで一時停止</label>
+        <label>字幕の大きさ <select data-k="subSize"><option value="0.8">小</option><option value="1">中</option><option value="1.25">大</option><option value="1.5">特大</option></select></label>
+        <label>字幕の位置 <select data-k="subPos"><option value="4">一番下</option><option value="9">下</option><option value="18">少し上</option><option value="28">上</option></select></label>
         <div class="nds-gk">単語の解説：<span class="nds-gstate"></span> <button class="nds-gset">APIキーを設定</button></div>
-        <div class="nds-keys">A 前の文 ・ S もう一度 ・ D 次の文 ・ Q 自動一時停止 ・ P パネル</div>
+        <div class="nds-keys">A 前の文 ・ S もう一度 ・ D 次の文 ・ J 日本語を見る ・ Q 1文ごとに止める ・ P パネル</div>
       </div>
       <div class="nds-status"></div>
       <div class="nds-list"></div>
       <div class="nds-saved" hidden></div>
+      <div class="nds-quiz" hidden></div>
     </div>
     <button id="nds-open" title="字幕パネル (P)">字</button>
     <div id="nds-pop" hidden></div>`;
 
   const subEn = $('.nds-en', root), subJa = $('.nds-ja', root), panel = $('#nds-panel', root);
-  const list = $('.nds-list', root), savedBox = $('.nds-saved', root), pop = $('#nds-pop', root);
+  const list = $('.nds-list', root), savedBox = $('.nds-saved', root), quizBox = $('.nds-quiz', root), pop = $('#nds-pop', root);
   const statusEl = $('.nds-status', root), settingsBox = $('.nds-settings', root);
 
   function mount() {
@@ -92,12 +97,18 @@
     root.classList.toggle('nds-ja-bottom', !!S.settings.jaBottom);
     root.classList.toggle('nds-ja-blur', !!S.settings.jaBlur);
     root.classList.toggle('nds-panel-on', !!S.settings.panel);
-    settingsBox.querySelectorAll('input[data-k]').forEach(i => { i.checked = !!S.settings[i.dataset.k]; });
+    document.documentElement.classList.toggle('nds-panel-open', !!S.settings.panel); // shrinks the video beside it
+    root.style.setProperty('--nds-sub-scale', S.settings.subSize);
+    root.style.setProperty('--nds-sub-bottom', S.settings.subPos + 'vh');
+    settingsBox.querySelectorAll('[data-k]').forEach(i => {
+      if (i.type === 'checkbox') i.checked = !!S.settings[i.dataset.k]; else i.value = S.settings[i.dataset.k];
+    });
   }
   settingsBox.addEventListener('change', e => {
     const k = e.target.dataset.k; if (!k) return;
-    S.settings[k] = e.target.checked; saveSettings(); applySettings();
+    S.settings[k] = e.target.type === 'checkbox' ? e.target.checked : e.target.value; saveSettings(); applySettings();
     if (k === 'jaOfficial') applyJaMode();
+    if (k === 'hideSdh') S.movieId = null; // rebuild the lines: the 100 ms tick restarts this movie
   });
   // The AI keys are entered on the extension's options page and never come into this
   // page: background.js holds them (keystore.js). Here we only get the flag nds_ai saying
@@ -120,7 +131,9 @@
     panel.querySelectorAll('[data-tab]').forEach(x => x.classList.toggle('on', x === b));
     list.hidden = b.dataset.tab !== 'subs';
     savedBox.hidden = b.dataset.tab !== 'saved';
+    quizBox.hidden = b.dataset.tab !== 'quiz';
     if (!savedBox.hidden) renderSaved();
+    if (!quizBox.hidden) nextQuiz();
   });
   // stop Netflix from treating clicks/keys inside our UI as player input
   for (const ev of ['click', 'mousedown', 'mouseup', 'dblclick', 'wheel']) {
@@ -161,10 +174,22 @@
     subJa.textContent = c.ja || '';
   }
   // Lines of English as hoverable word spans; data-i numbers the words across all lines.
+  // the line as shown: without sound descriptions etc. unless the setting is off
+  const spoken = text => (S.settings.hideSdh ? N.stripSdh(text) : text);
+
+  // Saved single words are underlined wherever they come up again (any inflection).
+  const isSaved = w => S.savedWords && S.savedWords.size && N.lemmas(w).some(l => S.savedWords.has(l));
+  function refreshSavedWords() {
+    S.savedWords = new Set(S.saved.map(x => x.head.toLowerCase()).filter(h => !h.includes(' ')));
+    updateDueBadge();
+    if (!S.cues.length) return;
+    renderSub(); renderList(); S.idx = -1; // the 100 ms tick re-marks the current row
+  }
+
   function wordsHtml(lines) {
     let wi = 0;
     return lines.map(line => N.tokenize(line).map(tok => tok.w
-      ? `<span class="nds-w" data-i="${wi++}">${esc(tok.t)}</span>`
+      ? `<span class="nds-w${isSaved(tok.w) ? ' nds-sv' : ''}" data-i="${wi++}">${esc(tok.t)}</span>`
       : esc(tok.t)).join(''));
   }
   function currentIndex(t) {
@@ -176,8 +201,12 @@
   setInterval(() => {
     const id = watchId();
     root.style.display = id ? '' : 'none';
+    if (!id) document.documentElement.classList.remove('nds-panel-open'); // startMovie → applySettings puts it back
+    document.documentElement.classList.toggle('nds-active', !!id);
     if (!id) return;
     mount();
+    const titleEl = document.querySelector('[data-uia="video-title"]');
+    if (titleEl) S.title = titleEl.innerText.replace(/\s*\n\s*/g, ' ').trim();
     if (id !== S.movieId) startMovie(id);
     if (!S.cues.length) return;
     const v = video(); if (!v) return;
@@ -190,6 +219,7 @@
     const k = currentIndex(t);
     if (k !== S.idx) {
       S.idx = k;
+      root.classList.remove('nds-reveal'); // J shows the Japanese of one line only
       renderSub();
       list.querySelectorAll('.nds-row.on').forEach(r => r.classList.remove('on'));
       const row = list.querySelector(`.nds-row[data-k="${k}"]`);
@@ -247,12 +277,13 @@
       const en = await loadSub(pickTrack(S.tracksByMovie[id], 'en'));
       if (S.movieId !== id) return;
       if (!en) { setStatus('この作品は英語字幕が見つかりませんでした'); return; }
-      S.cues = en.map(c => ({ start: c.start, end: c.end, en: c.text, ja: '' }));
+      S.cues = en.map(c => ({ start: c.start, end: c.end, en: spoken(c.text), ja: '' })).filter(c => c.en);
       S.source = 'track';
       const ja = await loadJa(id);
       if (S.movieId !== id) return;
       setStatus(!ja && S.settings.jaOfficial ? 'Netflixの日本語字幕がないため、機械翻訳を使います' : '');
       applyJaMode(); applySettings();
+      checkPendingSeek(id);
     } catch (e) {
       if (!alive()) return orphaned(); // extension reloaded: already told the user to reload the page
       console.warn('[NDS] subtitle load failed', e);
@@ -289,11 +320,12 @@
     S.source = 'dom'; S.jaSource = 'machine';
     setStatus('簡易モード：Netflixの字幕を英語にしてください（一覧は再生に合わせて増えます）');
     startMachineTranslation();
+    checkPendingSeek(S.movieId);
     let last = '';
     const obs = new MutationObserver(() => {
       if (S.source !== 'dom') { obs.disconnect(); return; }
       const box = $('.player-timedtext');
-      const text = box ? N.cleanText(box.innerHTML) : '';
+      const text = box ? spoken(N.cleanText(box.innerHTML)) : '';
       if (!text || text === last) return;
       last = text;
       const t = nowMs();
@@ -434,26 +466,38 @@
     showPop(w, ctx);
     setTimeout(() => { if (hoverCtx === ctx) askContext(ctx); }, 350); // only for words you stop on
     const v = video();
-    if (S.settings.hoverPause && v && !v.paused) { v.pause(); S.hoverPaused = true; }
+    // pause only for the line being played; browsing the side list shouldn't stop the video
+    if (box === subEn && S.settings.hoverPause && v && !v.paused) { v.pause(); S.hoverPaused = true; }
   }
 
+  // The first sense stays visible; the rest is hidden while the AI explanation is shown
+  // (the dictionary is folded) and comes back with the 辞書をもっと見る button.
   function entryHtml(head, mean, kind, maxSenses = 5) {
-    mean = mean.split(' / ').slice(0, maxSenses).join(' / ');
+    const [first, ...rest] = mean.split(' / ').slice(0, maxSenses).map(esc);
     return `<div class="nds-e"><div class="nds-eh"><b>${esc(head)}</b>` +
       (kind ? `<span class="nds-kind">${kind}</span>` : '') +
       `<button class="nds-star" data-head="${esc(head)}" title="保存">☆</button></div>` +
-      `<div class="nds-em">${esc(mean).replace(/ \/ /g, '<br>')}</div></div>`;
+      `<div class="nds-em">${first}${rest.length ? `<span class="nds-more"><br>${rest.join('<br>')}</span>` : ''}</div></div>`;
   }
   function showPop(anchor, ctx) {
     let html = '';
     if (ctx.phrase) html += entryHtml(ctx.phrase.head, ctx.phrase.mean, '熟語');
     if (ctx.word) html += entryHtml(ctx.word.head, ctx.word.mean, ctx.phrase ? '単語' : '', ctx.phrase ? 2 : 5);
     if (!html) html = `<div class="nds-e"><b>${esc(ctx.surface)}</b><div class="nds-em">辞書に見つかりませんでした</div></div>`;
-    pop.innerHTML = (S.ai || lmState !== 'unavailable' ? '<div class="nds-ctx"></div>' : '') + html;
+    const withAi = !!(S.ai || lmState !== 'unavailable');
+    const fold = withAi && /nds-more/.test(html);
+    pop.innerHTML = (withAi ? '<div class="nds-ctx"></div>' : '') +
+      `<div class="nds-dict${fold ? ' nds-folded' : ''}">${html}` +
+      (fold ? '<button class="nds-dmore">辞書をもっと見る</button>' : '') + '</div>';
     pop.querySelectorAll('.nds-star').forEach(b => {
       if (S.saved.some(s => s.head === b.dataset.head)) { b.textContent = '★'; b.classList.add('on'); }
     });
     pop.hidden = false;
+    placePop(anchor);
+  }
+  let popAnchor = null;
+  function placePop(anchor) {
+    popAnchor = anchor;
     const r = anchor.getBoundingClientRect();
     const pw = Math.min(360, window.innerWidth - 16);
     pop.style.width = pw + 'px';
@@ -471,6 +515,7 @@
     pop.style.top = '';
   }
   pop.addEventListener('click', e => {
+    if (e.target.closest('.nds-dmore')) { $('.nds-dict', pop).classList.remove('nds-folded'); e.target.remove(); return; }
     if (e.target.closest('.nds-lm')) { const ctx = hoverCtx; lmInit(true).then(() => { if (ctx && hoverCtx === ctx) askContext(ctx); }); return; }
     const b = e.target.closest('.nds-star'); if (!b || !hoverCtx) return;
     const head = b.dataset.head;
@@ -479,7 +524,7 @@
     else {
       const ent = [hoverCtx.phrase, hoverCtx.word].find(x => x && x.head === head);
       S.saved.unshift({ head, mean: ent ? ent.mean : '', ctx: hoverCtx.ctxMean || '', info: hoverCtx.ctxInfo || null, context: hoverCtx.cue.en.replace(/\n/g, ' '),
-        ja: (hoverCtx.cue.ja || '').replace(/\n/g, ' '), movieId: S.movieId, time: hoverCtx.cue.start, at: Date.now() });
+        ja: (hoverCtx.cue.ja || '').replace(/\n/g, ' '), movieId: S.movieId, title: S.title || '', time: hoverCtx.cue.start, at: Date.now() });
       b.textContent = '★'; b.classList.add('on');
     }
     saveSaved();
@@ -569,7 +614,7 @@
     try {
       const info = ctx.ctxInfo = await ctxCache.get(key);
       ctx.ctxMean = info.meaning;
-      if (hoverCtx === ctx) box.innerHTML = infoHtml(info);
+      if (hoverCtx === ctx) { box.innerHTML = infoHtml(info); if (popAnchor) placePop(popAnchor); } // it got taller
     } catch (e) {
       console.warn('[NDS] context meaning', e);
       ctxCache.delete(key);
@@ -623,10 +668,14 @@
     if (!S.saved.length) { savedBox.innerHTML = '<div class="nds-empty">単語にカーソルを合わせて ☆ を押すと保存できます</div>'; return; }
     savedBox.innerHTML = `<div class="nds-sbar">${S.saved.length}件 <button class="nds-csv">Anki用CSVを保存</button></div>` +
       S.saved.map((s, k) => `<div class="nds-srow"><div><b>${esc(s.head)}</b> <span class="nds-sm">${esc(s.ctx || s.mean.split(' / ')[0])}</span></div>` +
-        `<div class="nds-sc">${esc(s.context)}</div><button class="nds-del" data-k="${k}" title="削除">✕</button></div>`).join('');
+        `<div class="nds-sc">${esc(s.context)}</div>` +
+        (s.time != null ? `<button class="nds-go" data-k="${k}">▶ ${esc(s.title ? s.title + ' ' : '')}${fmt(s.time)}</button>` : '') +
+        `<button class="nds-del" data-k="${k}" title="削除">✕</button></div>`).join('');
   }
   savedBox.addEventListener('click', e => {
     if (e.target.closest('.nds-del')) { S.saved.splice(+e.target.dataset.k, 1); saveSaved(); renderSaved(); return; }
+    const go = e.target.closest('.nds-go');
+    if (go) return goToSaved(S.saved[+go.dataset.k]);
     if (e.target.closest('.nds-csv')) {
       const q = s => '"' + String(s).replace(/"/g, '""') + '"';
       const study = s => !s.info ? (s.ctx ? 'この文で: ' + s.ctx + '<br><br>' : '') :
@@ -641,15 +690,125 @@
     }
   });
 
+  // Back to the scene a word was saved from: seek if it's this episode, otherwise open
+  // that episode and seek once its subtitles are loaded (checkPendingSeek).
+  function goToSaved(s) {
+    if (!s || s.time == null) return;
+    if (String(s.movieId) === S.movieId) {
+      S.pausedAt = -1; seek(Math.max(0, s.time - 300));
+      const v = video(); if (v && v.paused) v.play();
+      return;
+    }
+    if (!alive()) return orphaned();
+    chrome.storage.local.set({ nds_pending_seek: { movieId: String(s.movieId), time: s.time, at: Date.now() } })
+      .then(() => { location.href = '/watch/' + s.movieId; });
+  }
+  function checkPendingSeek(id) {
+    if (!alive()) return;
+    chrome.storage.local.get('nds_pending_seek', ({ nds_pending_seek: p }) => {
+      if (!p || p.movieId !== id || Date.now() - p.at > 5 * 60 * 1000) return;
+      chrome.storage.local.remove('nds_pending_seek');
+      setTimeout(() => seek(Math.max(0, p.time - 300)), 1500); // let the player settle first
+    });
+  }
+
+  // ---------- review quiz (from saved words; no AI calls) ----------
+  // Spaced repetition: a right answer moves the word up a box and pushes its next
+  // review out (now / 1 / 3 / 7 / 21 days); a wrong one sends it back to box 0.
+  const QUIZ_DAYS = [0, 1, 3, 7, 21];
+  const wordRe = (head, flags) => new RegExp(`\\b(${head.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})\\b`, flags);
+  const meaningOf = s => s.ctx || (s.info && s.info.meaning) || s.mean.split(' / ')[0];
+  const dueWords = () => S.saved.filter(s => (s.due || 0) <= Date.now());
+  const shuffle = a => a.map(x => [Math.random(), x]).sort((p, q) => p[0] - q[0]).map(x => x[1]);
+  function updateDueBadge() {
+    const n = dueWords().length;
+    $('.nds-due', panel).textContent = n ? ` ${n}` : '';
+  }
+
+  let quiz = null; // { s, kind, choices, answered }
+  function nextQuiz(all) {
+    const pool = all ? S.saved : dueWords();
+    if (!S.saved.length) { quizBox.innerHTML = '<div class="nds-empty">単語を ☆ で保存すると、ここで復習できます</div>'; return; }
+    if (!pool.length) {
+      quizBox.innerHTML = '<div class="nds-empty">今日の復習は終わりです 🎉<br><button class="nds-qall">全部から出題する</button></div>';
+      return;
+    }
+    const s = pool.slice().sort((a, b) => (a.due || 0) - (b.due || 0))[Math.floor(Math.random() * Math.min(3, pool.length))];
+    const others = shuffle(S.saved.filter(x => x !== s));
+    // fill-in-the-blank when the saved word appears as-is in its line, otherwise pick the meaning
+    const blank = s.context && !s.head.includes(' ') && wordRe(s.head, 'i').test(s.context) && others.length >= 3;
+    const kind = blank && Math.random() < 0.5 ? 'blank' : 'meaning';
+    const choices = others.length >= 3
+      ? shuffle([s, ...others.slice(0, 3)])
+      : null; // fewer than 4 saved words: flash card
+    quiz = { s, kind, choices, answered: false, all };
+    const line = esc((s.context || '').replace(/^-\s*/, '').replace(/ -/g, ' / ')); // dialogue dashes read badly here
+    const q = kind === 'blank'
+      ? `<div class="nds-qq">空欄に入る語は？</div><div class="nds-ql">${line.replace(wordRe(s.head, 'i'), '<b>＿＿＿</b>')}</div>`
+      : `<div class="nds-qq">この文での <b>${esc(s.head)}</b> の意味は？</div><div class="nds-ql">${line.replace(wordRe(s.head, 'i'), '<b>$1</b>')}</div>`;
+    quizBox.innerHTML = `<div class="nds-qcard">${q}` +
+      (choices
+        ? `<div class="nds-qch">${choices.map((c, i) => `<button class="nds-qc" data-i="${i}">${esc(kind === 'blank' ? c.head : meaningOf(c))}</button>`).join('')}</div>`
+        : '<button class="nds-qshow">答えを見る</button>') +
+      '<div class="nds-qa" hidden></div></div>';
+  }
+  function answerQuiz(correct) {
+    const { s } = quiz;
+    quiz.answered = true;
+    if (correct !== null) {
+      s.box = correct ? Math.min((s.box || 0) + 1, QUIZ_DAYS.length - 1) : 0;
+      s.due = Date.now() + QUIZ_DAYS[s.box] * 86400000;
+      saveSaved(); updateDueBadge();
+    }
+    const info = s.info;
+    const a = $('.nds-qa', quizBox);
+    a.hidden = false;
+    a.innerHTML = (correct === null ? '' : `<div class="${correct ? 'nds-ok' : 'nds-ng'}">${correct ? '正解！' : '残念…'}</div>`) +
+      `<div><b>${esc(s.head)}</b>：${esc(meaningOf(s))}</div>` +
+      (info ? `<div class="nds-ci"><span class="nds-cl">使われ方</span>${esc(info.usage)}</div>` +
+        `<div class="nds-ci"><span class="nds-cl">例</span>${esc(info.example)}<div class="nds-cx">${esc(info.exampleJa)}</div></div>` : '') +
+      (s.ja ? `<div class="nds-ci"><span class="nds-cl">訳</span>${esc(s.ja)}</div>` : '') +
+      `<div class="nds-qbtns">${s.time != null ? '<button class="nds-qgo">▶ この場面を見る</button>' : ''}` +
+      (correct === null ? '<button class="nds-qself" data-ok="1">覚えてた</button><button class="nds-qself" data-ok="0">忘れてた</button>' : '') +
+      '<button class="nds-qnext">次へ</button></div>';
+  }
+  quizBox.addEventListener('click', e => {
+    const t = e.target;
+    if (t.closest('.nds-qall')) return nextQuiz(true);
+    if (!quiz) return;
+    if (t.closest('.nds-qnext')) return nextQuiz(quiz.all);
+    if (t.closest('.nds-qgo')) return goToSaved(quiz.s);
+    if (t.closest('.nds-qshow')) return answerQuiz(null);
+    const self = t.closest('.nds-qself');
+    if (self) { // flash card: grade yourself
+      quiz.s.box = self.dataset.ok === '1' ? Math.min((quiz.s.box || 0) + 1, QUIZ_DAYS.length - 1) : 0;
+      quiz.s.due = Date.now() + QUIZ_DAYS[quiz.s.box] * 86400000;
+      saveSaved(); updateDueBadge();
+      return nextQuiz(quiz.all);
+    }
+    const c = t.closest('.nds-qc');
+    if (c && !quiz.answered) {
+      const ok = quiz.choices[+c.dataset.i] === quiz.s;
+      quizBox.querySelectorAll('.nds-qc').forEach((b, i) => {
+        b.disabled = true;
+        if (quiz.choices[i] === quiz.s) b.classList.add('nds-right');
+      });
+      if (!ok) c.classList.add('nds-wrong');
+      answerQuiz(ok);
+    }
+  });
+
   // ---------- keyboard shortcuts ----------
   window.addEventListener('keydown', e => {
     if (!watchId() || e.ctrlKey || e.metaKey || e.altKey) return;
     const tag = (e.target && e.target.tagName) || '';
     if (/INPUT|TEXTAREA|SELECT/.test(tag) || (e.target && e.target.isContentEditable)) return;
     const key = e.key.toLowerCase();
-    if (!['a', 's', 'd', 'q', 'p'].includes(key)) return;
+    if (!['a', 's', 'd', 'q', 'p', 'j'].includes(key)) return;
     e.preventDefault(); e.stopImmediatePropagation();
     if (key === 'p') return togglePanel();
+    // check your understanding: show this line's Japanese (also under the video) until the next line
+    if (key === 'j') return root.classList.toggle('nds-reveal');
     if (key === 'q') { S.settings.autoPause = !S.settings.autoPause; saveSettings(); applySettings(); flash(S.settings.autoPause ? '自動一時停止 ON' : '自動一時停止 OFF'); return; }
     if (!S.cues.length) return;
     const t = nowMs(), cur = Math.max(0, currentIndex(t));
@@ -669,6 +828,7 @@
   chrome.storage.local.get(['nds_settings', 'nds_saved', 'nds_ai'], r => {
     Object.assign(S.settings, r.nds_settings || {});
     S.saved = r.nds_saved || [];
+    refreshSavedWords();
     setAi(r.nds_ai);
     applySettings(); applyJaMode();
   });

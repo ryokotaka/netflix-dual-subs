@@ -24,3 +24,7 @@ const tc = N.parseTTML(ttml); console.log(JSON.stringify(tc));
 const en=[{start:1000,end:3500,text:'a'},{start:5000,end:6000,text:'b'},{start:9000,end:9500,text:'c'}];
 const ja=[{start:900,end:3400,text:'あ'},{start:4900,end:6100,text:'い'}];
 console.log(JSON.stringify(N.alignCues(en, ja)));
+// closed-caption cleanup
+for (const s of ['[indistinct chattering, giggling]', '-[Ginny] What, Mom?\n-Is there a hair?', '-Hey!\n-[sighs]',
+  '♪ Go down, go down ♪', 'NORAH: Girl, you gotta blend!', 'Ugh! (laughs) Jesus, hang on!', "I'm fine.", '[Georgia] No!'])
+  console.log(JSON.stringify(s), '→', JSON.stringify(N.stripSdh(s)));

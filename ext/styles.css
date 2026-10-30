@@ -14,7 +14,7 @@ html.nds-hide-nf .player-timedtext { opacity: 0 !important; }
 
 /* ---- bottom dual subtitles ---- */
 #nds-sub {
-  position: fixed; left: 0; right: 0; bottom: 9vh; z-index: 2147483000;
+  position: fixed; left: 0; right: 0; bottom: var(--nds-sub-bottom, 9vh); z-index: 2147483000;
   display: flex; flex-direction: column; align-items: center; gap: 6px;
   pointer-events: none; text-align: center; padding: 0 4vw;
   transition: opacity .3s, right .2s;
@@ -22,14 +22,14 @@ html.nds-hide-nf .player-timedtext { opacity: 0 !important; }
 #nds-root.nds-panel-on #nds-sub { right: 340px; }
 #nds-root.nds-gap #nds-sub { opacity: 0; }
 .nds-en {
-  font-size: clamp(18px, 2.4vw, 38px); font-weight: 600; line-height: 1.35;
+  font-size: calc(clamp(18px, 2.4vw, 38px) * var(--nds-sub-scale, 1)); font-weight: 600; line-height: 1.35;
   text-shadow: 0 0 4px #000, 0 2px 6px #000;
 }
 .nds-en > div { display: block; }
 .nds-w { pointer-events: auto; cursor: help; border-radius: 4px; padding: 0 1px; }
 .nds-w:hover, .nds-w.nds-hl { background: rgba(255, 209, 102, 0.25); color: var(--nds-hl); }
 .nds-ja {
-  font-size: clamp(14px, 1.7vw, 26px); color: #e6e6e6; line-height: 1.4; white-space: pre-line;
+  font-size: calc(clamp(14px, 1.7vw, 26px) * var(--nds-sub-scale, 1)); color: #e6e6e6; line-height: 1.4; white-space: pre-line;
   text-shadow: 0 0 4px #000, 0 2px 6px #000;
 }
 #nds-root.nds-noja .nds-ja, #nds-root.nds-noja .nds-rja { display: none; }
@@ -52,6 +52,8 @@ html.nds-hide-nf .player-timedtext { opacity: 0 !important; }
 .nds-star { margin-left: auto; background: none; border: 0; font-size: 18px; color: var(--nds-dim) !important; }
 .nds-star.on { color: var(--nds-hl) !important; }
 .nds-em { color: #ddd; margin-top: 2px; }
+.nds-folded .nds-more { display: none; }
+.nds-dmore { margin-top: 6px; padding: 1px 8px; border-radius: 6px; border: 1px solid var(--nds-line); background: none; font-size: 12px; color: var(--nds-dim) !important; }
 .nds-ctx { color: var(--nds-hl); font-size: 15px; padding-bottom: 8px; margin-bottom: 8px; border-bottom: 1px solid var(--nds-line); }
 .nds-ctx:empty { display: none; }
 .nds-cm b { font-size: 16px; }
@@ -87,8 +89,8 @@ html.nds-hide-nf .player-timedtext { opacity: 0 !important; }
 .nds-status { padding: 8px 14px; font-size: 12px; color: var(--nds-hl); border-bottom: 1px solid var(--nds-line); }
 .nds-status[hidden] { display: none; }
 .nds-status button, .nds-csv { color: #fff !important; background: var(--nds-accent); border: 0; border-radius: 6px; padding: 3px 8px; margin-left: 6px; font-size: 12px; }
-.nds-list, .nds-saved { flex: 1; overflow-y: auto; }
-.nds-list[hidden], .nds-saved[hidden] { display: none; }
+.nds-list, .nds-saved, .nds-quiz { flex: 1; overflow-y: auto; }
+.nds-list[hidden], .nds-saved[hidden], .nds-quiz[hidden] { display: none; }
 .nds-row { display: flex; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--nds-line); cursor: pointer; }
 .nds-row:hover { background: rgba(255,255,255,.05); }
 .nds-row.on { background: rgba(181,123,255,.18); box-shadow: inset 3px 0 0 var(--nds-accent); }
@@ -105,3 +107,40 @@ html.nds-hide-nf .player-timedtext { opacity: 0 !important; }
   position: fixed; top: 20%; left: 50%; transform: translateX(-50%); z-index: 2147483003;
   background: var(--nds-bg); padding: 10px 18px; border-radius: 8px; font-size: 16px;
 }
+/* J: reveal the current line's Japanese (side list and under the video) */
+#nds-root.nds-reveal .nds-row.on .nds-rja { filter: none; }
+#nds-root.nds-reveal .nds-ja { display: block; }
+/* words you saved before */
+.nds-w.nds-sv { text-decoration: underline 2px var(--nds-accent); text-underline-offset: 4px; }
+#nds-root .nds-settings select { background: #222229; color: var(--nds-text); border: 1px solid var(--nds-line); border-radius: 6px; margin-left: 6px; }
+/* saved list: back to the scene */
+.nds-go { margin-top: 4px; padding: 1px 8px; border-radius: 6px; border: 1px solid var(--nds-line); background: none; font-size: 12px; color: var(--nds-dim) !important; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nds-go:hover { color: var(--nds-text) !important; border-color: var(--nds-accent); }
+.nds-due { margin-left: 2px; padding: 0 5px; border-radius: 99px; background: var(--nds-accent); color: #fff; font-size: 11px; }
+.nds-due:empty { display: none; }
+/* review quiz */
+.nds-qcard { padding: 14px 12px; }
+.nds-qq { color: var(--nds-dim); font-size: 13px; }
+.nds-ql { font-size: 16px; line-height: 1.5; margin: 8px 0 12px; }
+.nds-ql b { color: var(--nds-hl); }
+.nds-qch { display: flex; flex-direction: column; gap: 6px; }
+.nds-qc, .nds-qshow, .nds-qbtns button, .nds-qall { text-align: left; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--nds-line); background: rgba(255,255,255,.04); }
+.nds-qc:not([disabled]):hover { border-color: var(--nds-accent); }
+.nds-qc.nds-right { border-color: #7bd88f; background: rgba(123,216,143,.15); }
+.nds-qc.nds-wrong { border-color: #ff7b7b; background: rgba(255,123,123,.15); }
+.nds-qa { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--nds-line); font-size: 14px; }
+.nds-qa[hidden] { display: none; }
+.nds-ok { color: #7bd88f; font-weight: 600; } .nds-ng { color: #ff7b7b; font-weight: 600; }
+.nds-qbtns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.nds-qall { margin-top: 10px; }
+/* panel open: scale Netflix's video down to the space left of the panel. Resizing its
+   elements breaks the layout Netflix's script sets up, so scale instead - one level inside
+   the video canvas (Netflix measures the canvas and would shrink the video a second time),
+   and keep the video at the canvas's full width (Netflix may have set a measured width). */
+html.nds-panel-open [data-uia="video-canvas"] > div {
+  transform: scale(calc((100vw - 340px) / 100vw)); transform-origin: left center; transition: transform .2s;
+}
+html.nds-panel-open [data-uia="video-canvas"] video { width: 100% !important; }
+/* Netflix's "You're watching ..." overlay covers the frame a few seconds into every
+   pause - and pausing to study (Q, word lookups) is the point here */
+html.nds-active .watch-video--evidence-overlay-container { display: none !important; }
