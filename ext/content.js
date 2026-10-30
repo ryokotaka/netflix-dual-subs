@@ -21,7 +21,6 @@
     status: '',
     saved: [],
     settings: { shrinkVideo: false, subSize: '1', subPos: '9', hideSdh: true, showJa: true, jaBlur: true, jaBottom: false, jaOfficial: false, hideNetflix: true, autoPause: false, hoverPause: true, panel: true },
-    userScrollAt: 0,
   };
 
   // ---------- storage ----------
@@ -143,7 +142,6 @@
     pop.addEventListener(ev, e => e.stopPropagation());
     $('#nds-sub', root).addEventListener(ev, e => e.stopPropagation());
   }
-  list.addEventListener('wheel', () => { S.userScrollAt = Date.now(); }, { passive: true });
 
   function setStatus(s) { S.status = s; statusEl.textContent = s; statusEl.hidden = !s; }
 
@@ -163,10 +161,12 @@
     const r = list.querySelector(`.nds-row[data-k="${k}"] .nds-rja`);
     if (r) r.textContent = (S.cues[k].ja || '').replace(/\n/g, ' ');
   }
+  // The current (purple) row is always kept in the middle of the list.
   function scrollToActive(force) {
-    if (!S.settings.panel || (!force && Date.now() - S.userScrollAt < 4000)) return;
-    const r = list.querySelector('.nds-row.on');
-    if (r) r.scrollIntoView({ block: 'center', behavior: force ? 'auto' : 'smooth' });
+    const r = S.settings.panel && list.querySelector('.nds-row.on');
+    if (!r) return;
+    const top = list.scrollTop + r.getBoundingClientRect().top - list.getBoundingClientRect().top - (list.clientHeight - r.offsetHeight) / 2;
+    list.scrollTo({ top, behavior: force ? 'auto' : 'smooth' });
   }
 
   // ---------- current line ----------
@@ -447,7 +447,6 @@
   subEn.addEventListener('click', e => { if (e.target.closest('.nds-w') && hoverCtx) askContext(hoverCtx, true); }); // click = ask the AI
   list.addEventListener('mouseover', e => {
     const row = e.target.closest('.nds-row'); if (!row) return;
-    S.userScrollAt = Date.now(); // don't auto-scroll the list away while reading it
     onWordOver(e, row, S.cues[+row.dataset.k]);
   });
   list.addEventListener('mouseout', e => { if (e.target.closest('.nds-w')) endHover(e); });
@@ -470,8 +469,8 @@
     showPop(w, ctx);
     askContext(ctx, false); // a saved answer, or the button that asks (AI calls only on click)
     const v = video();
-    // pause only for the line being played; browsing the side list shouldn't stop the video
-    if (box === subEn && S.settings.hoverPause && v && !v.paused) { v.pause(); S.hoverPaused = true; }
+    // pause while looking a word up, in the subtitle and in the side list alike
+    if (S.settings.hoverPause && v && !v.paused) { v.pause(); S.hoverPaused = true; }
   }
 
   // The first sense stays visible; the rest is hidden while the AI explanation is shown
