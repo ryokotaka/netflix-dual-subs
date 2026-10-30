@@ -67,7 +67,7 @@
         <label><input type="checkbox" data-k="jaOfficial"> Netflix公式の日本語字幕を使う（意訳・省略あり）</label>
         <label><input type="checkbox" data-k="hideNetflix"> Netflixの字幕を隠す</label>
         <label><input type="checkbox" data-k="autoPause"> 1文ごとに自動一時停止 (Q)</label>
-        <label><input type="checkbox" data-k="hoverPause"> 単語にカーソルで一時停止</label>
+        <label><input type="checkbox" data-k="hoverPause"> カーソルで一時停止（字幕の単語・右のパネル）</label>
         <label><input type="checkbox" data-k="shrinkVideo"> パネルを開いている間は動画を左に縮める</label>
         <label>字幕の大きさ <select data-k="subSize"><option value="0.8">小</option><option value="1">中</option><option value="1.25">大</option><option value="1.5">特大</option></select></label>
         <label>字幕の位置 <select data-k="subPos"><option value="4">一番下</option><option value="9">下</option><option value="18">少し上</option><option value="28">上</option></select></label>
@@ -555,12 +555,31 @@
     pop.hidden = true; hoverCtx = null;
     root.querySelectorAll('.nds-hl').forEach(x => x.classList.remove('nds-hl'));
     const v = video();
-    if (S.hoverPaused && v && v.paused) v.play();
+    // a word lookup ended; if the cursor is now in the panel, it keeps the video paused
+    if (S.hoverPaused && v && v.paused) { if (S.inPanel) S.panelPaused = true; else v.play(); }
     S.hoverPaused = false;
   }
   subEn.addEventListener('mouseleave', endHover);
   pop.addEventListener('mouseleave', endHover);
   pop.addEventListener('mouseenter', () => clearTimeout(hideTimer));
+
+  // Cursor inside the right panel = reading the list: the video stays paused until it
+  // leaves (moving onto a word popup beside the panel still counts as inside).
+  panel.addEventListener('mouseenter', () => {
+    S.inPanel = true;
+    const v = video();
+    if (S.settings.hoverPause && v && !v.paused) { v.pause(); S.panelPaused = true; }
+  });
+  function leavePanel(e) {
+    const to = e.relatedTarget;
+    if (to && (panel.contains(to) || pop.contains(to))) return;
+    S.inPanel = false;
+    const v = video();
+    if (S.panelPaused && !S.hoverPaused && v && v.paused) v.play();
+    S.panelPaused = false;
+  }
+  panel.addEventListener('mouseleave', leavePanel);
+  pop.addEventListener('mouseleave', e => { if (S.inPanel) leavePanel(e); });
 
   // ---------- meaning in context (Chrome's built-in AI, Gemini Nano: free, on-device) ----------
   const LM_OPTS = { expectedInputs: [{ type: 'text', languages: ['en'] }], expectedOutputs: [{ type: 'text', languages: ['ja', 'en'] }] };
