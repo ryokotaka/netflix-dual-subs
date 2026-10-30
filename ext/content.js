@@ -155,6 +155,7 @@
       `<div class="nds-rja">${esc(c.ja || '').replace(/\n/g, ' ')}</div></div></div>`).join('');
   }
   list.addEventListener('click', e => {
+    if (e.target.closest('.nds-w')) { if (hoverCtx) askContext(hoverCtx, true); return; } // word: ask the AI
     const row = e.target.closest('.nds-row'); if (!row) return;
     const c = S.cues[+row.dataset.k]; if (c) { S.pausedAt = -1; seek(c.start); }
   });
@@ -443,6 +444,7 @@
   let hoverCtx = null;
   // Words can be looked up both in the subtitle under the video and in the side list.
   subEn.addEventListener('mouseover', e => onWordOver(e, subEn, S.cues[S.idx]));
+  subEn.addEventListener('click', e => { if (e.target.closest('.nds-w') && hoverCtx) askContext(hoverCtx, true); }); // click = ask the AI
   list.addEventListener('mouseover', e => {
     const row = e.target.closest('.nds-row'); if (!row) return;
     S.userScrollAt = Date.now(); // don't auto-scroll the list away while reading it
@@ -466,7 +468,7 @@
     const target = phrase ? words.slice(phrase.start, phrase.end).join(' ') : words[i];
     const ctx = hoverCtx = { word, phrase, surface: words[i], target, cue: c };
     showPop(w, ctx);
-    setTimeout(() => { if (hoverCtx === ctx) askContext(ctx); }, 350); // only for words you stop on
+    askContext(ctx, false); // a saved answer, or the button that asks (AI calls only on click)
     const v = video();
     // pause only for the line being played; browsing the side list shouldn't stop the video
     if (box === subEn && S.settings.hoverPause && v && !v.paused) { v.pause(); S.hoverPaused = true; }
@@ -518,7 +520,8 @@
   }
   pop.addEventListener('click', e => {
     if (e.target.closest('.nds-dmore')) { $('.nds-dict', pop).classList.remove('nds-folded'); e.target.remove(); return; }
-    if (e.target.closest('.nds-lm')) { const ctx = hoverCtx; lmInit(true).then(() => { if (ctx && hoverCtx === ctx) askContext(ctx); }); return; }
+    if (e.target.closest('.nds-ask')) { if (hoverCtx) askContext(hoverCtx, true); return; }
+    if (e.target.closest('.nds-lm')) { const ctx = hoverCtx; lmInit(true).then(() => { if (ctx && hoverCtx === ctx) askContext(ctx, true); }); return; }
     const b = e.target.closest('.nds-star'); if (!b || !hoverCtx) return;
     const head = b.dataset.head;
     const at = S.saved.findIndex(s => s.head === head);
@@ -570,7 +573,23 @@
     required: ['meaning', 'usage', 'pattern', 'example', 'exampleJa'],
     additionalProperties: false,
   };
-  const ctxCache = new Map(); // "cueStart|target" -> Promise<info object (LM_SCHEMA)>
+  const ctxCache = new Map(); // ctxKey -> Promise<info object (LM_SCHEMA)>, requests in flight / this page
+
+  // Answers are kept per episode + line + word: the same word in another line is a different
+  // context and is asked again; looking it up again in the same line (rewatching, reloading)
+  // costs nothing. Newest 3000 kept in chrome.storage.local (no secrets in them).
+  const ctxKey = ctx => `${S.movieId}|${ctx.cue.start}|${ctx.target.toLowerCase()}`;
+  let ctxStore = {}, ctxSaveTimer = null;
+  if (alive()) chrome.storage.local.get('nds_ctx', r => { ctxStore = r.nds_ctx || {}; });
+  function rememberCtx(key, info) {
+    ctxStore[key] = { info, at: Date.now() };
+    clearTimeout(ctxSaveTimer);
+    ctxSaveTimer = setTimeout(() => {
+      const keys = Object.keys(ctxStore);
+      if (keys.length > 3000) keys.sort((a, b) => ctxStore[a].at - ctxStore[b].at).slice(0, keys.length - 3000).forEach(k => delete ctxStore[k]);
+      if (alive()) chrome.storage.local.set({ nds_ctx: ctxStore });
+    }, 1000);
+  }
   let lmBase = null, lmState = 'unknown'; // unknown | unavailable | downloadable | loading | ready
 
   async function lmInit(fromGesture) {
@@ -597,8 +616,21 @@
     }
   }
 
-  async function askContext(ctx) {
+  // request=false (hover): show a saved answer if there is one, otherwise the ask button.
+  // request=true (click on the word or the button): ask the AI.
+  async function askContext(ctx, request) {
     const box = $('.nds-ctx', pop); if (!box) return;
+    const key = ctxKey(ctx);
+    const show = info => {
+      ctx.ctxInfo = info; ctx.ctxMean = info.meaning;
+      if (hoverCtx === ctx) { box.innerHTML = infoHtml(info); if (popAnchor) placePop(popAnchor); } // it got taller
+    };
+    if (ctxStore[key]) return show(ctxStore[key].info);
+    if (!request && !ctxCache.has(key)) {
+      const cost = S.ai === 'claude' ? '・約0.02円' : '・無料';
+      box.innerHTML = `<button class="nds-ask">AIで解説（この文での意味・使われ方${cost}）</button>`;
+      return;
+    }
     if (!S.ai) { // Chrome's built-in model: may still need setting up
       if (lmState === 'unknown') await lmInit(false);
       if (hoverCtx !== ctx) return;
@@ -609,14 +641,11 @@
       }
       if (lmState === 'loading') { box.textContent = 'AIモデルを準備中…'; return; }
     }
-    const key = ctx.cue.start + '|' + ctx.target.toLowerCase();
     const ask = { claude: askClaude, gemini: askGemini }[S.ai] || askNano;
-    if (!ctxCache.has(key)) ctxCache.set(key, ask(contextPrompt(ctx.cue, ctx.target)));
+    if (!ctxCache.has(key)) ctxCache.set(key, ask(contextPrompt(ctx.cue, ctx.target)).then(info => { rememberCtx(key, info); return info; }));
     box.textContent = 'この文での使われ方：考え中…';
     try {
-      const info = ctx.ctxInfo = await ctxCache.get(key);
-      ctx.ctxMean = info.meaning;
-      if (hoverCtx === ctx) { box.innerHTML = infoHtml(info); if (popAnchor) placePop(popAnchor); } // it got taller
+      show(await ctxCache.get(key));
     } catch (e) {
       console.warn('[NDS] context meaning', e);
       ctxCache.delete(key);
