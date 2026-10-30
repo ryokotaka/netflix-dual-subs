@@ -20,7 +20,7 @@
     translating: false,
     status: '',
     saved: [],
-    settings: { subSize: '1', subPos: '9', hideSdh: true, showJa: true, jaBlur: true, jaBottom: false, jaOfficial: false, hideNetflix: true, autoPause: false, hoverPause: true, panel: true },
+    settings: { shrinkVideo: false, subSize: '1', subPos: '9', hideSdh: true, showJa: true, jaBlur: true, jaBottom: false, jaOfficial: false, hideNetflix: true, autoPause: false, hoverPause: true, panel: true },
     userScrollAt: 0,
   };
 
@@ -68,6 +68,7 @@
         <label><input type="checkbox" data-k="hideNetflix"> Netflixの字幕を隠す</label>
         <label><input type="checkbox" data-k="autoPause"> 1文ごとに自動一時停止 (Q)</label>
         <label><input type="checkbox" data-k="hoverPause"> 単語にカーソルで一時停止</label>
+        <label><input type="checkbox" data-k="shrinkVideo"> パネルを開いている間は動画を左に縮める</label>
         <label>字幕の大きさ <select data-k="subSize"><option value="0.8">小</option><option value="1">中</option><option value="1.25">大</option><option value="1.5">特大</option></select></label>
         <label>字幕の位置 <select data-k="subPos"><option value="4">一番下</option><option value="9">下</option><option value="18">少し上</option><option value="28">上</option></select></label>
         <div class="nds-gk">単語の解説：<span class="nds-gstate"></span> <button class="nds-gset">APIキーを設定</button></div>
@@ -97,7 +98,8 @@
     root.classList.toggle('nds-ja-bottom', !!S.settings.jaBottom);
     root.classList.toggle('nds-ja-blur', !!S.settings.jaBlur);
     root.classList.toggle('nds-panel-on', !!S.settings.panel);
-    document.documentElement.classList.toggle('nds-panel-open', !!S.settings.panel); // shrinks the video beside it
+    // opt-in: shrink the video into the space beside the panel (off: the panel overlaps it)
+    document.documentElement.classList.toggle('nds-panel-open', !!(S.settings.panel && S.settings.shrinkVideo));
     root.style.setProperty('--nds-sub-scale', S.settings.subSize);
     root.style.setProperty('--nds-sub-bottom', S.settings.subPos + 'vh');
     settingsBox.querySelectorAll('[data-k]').forEach(i => {
