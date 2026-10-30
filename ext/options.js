@@ -1,18 +1,20 @@
-// Settings page: the AI API keys live here (typing into a field on Netflix's
-// page doesn't work reliably, the player swallows the keys).
+// Settings page: the AI API keys are entered here (typing into a field on Netflix's
+// page doesn't work reliably, the player swallows the keys) and kept in keystore.js.
 const $ = id => document.getElementById(id);
 const show = id => (text, ok) => { $(id).textContent = text; $(id).className = 'st ' + (ok === undefined ? '' : ok ? 'ok' : 'ng'); };
 const status = show('status'), cstatus = show('cstatus');
 
-chrome.storage.local.get(['nds_gemini_key', 'nds_claude_key'], r => {
-  $('key').value = r.nds_gemini_key || '';
-  $('ckey').value = r.nds_claude_key || '';
-});
+(async () => {
+  const old = await chrome.storage.local.get(['nds_gemini_key', 'nds_claude_key']); // if background.js hasn't moved them yet
+  $('key').value = (await keystore.get('gemini')) || old.nds_gemini_key || '';
+  $('ckey').value = (await keystore.get('claude')) || old.nds_claude_key || '';
+})();
 
 // ---------- Claude ----------
 async function saveClaude() {
   const key = $('ckey').value.trim();
-  await chrome.storage.local.set({ nds_claude_key: key });
+  await keystore.set('claude', key);
+  await keystore.updateFlag();
   return key;
 }
 $('csave').onclick = async () => { cstatus((await saveClaude()) ? '保存しました' : 'キーが空です', true); };
@@ -39,7 +41,8 @@ $('ctest').onclick = async () => {
 
 async function save() {
   const key = $('key').value.trim();
-  await chrome.storage.local.set({ nds_gemini_key: key });
+  await keystore.set('gemini', key);
+  await keystore.updateFlag();
   await chrome.storage.local.remove(['nds_gemini_model', 'nds_gemini_thinking']); // a new key may see other models
   return key;
 }

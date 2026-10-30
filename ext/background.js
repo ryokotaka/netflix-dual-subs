@@ -1,5 +1,17 @@
 // Fetches subtitle files for the content script (avoids CORS problems on the CDN),
 // and translates text with Google Translate's free web endpoint.
+importScripts('keystore.js');
+
+// Older versions kept the API keys in chrome.storage.local, which content scripts can
+// read; move them into the keystore once and set the flag content.js looks at.
+(async () => {
+  const old = await chrome.storage.local.get(['nds_claude_key', 'nds_gemini_key']);
+  if (old.nds_claude_key) await keystore.set('claude', old.nds_claude_key);
+  if (old.nds_gemini_key) await keystore.set('gemini', old.nds_gemini_key);
+  if ('nds_claude_key' in old || 'nds_gemini_key' in old) await chrome.storage.local.remove(['nds_claude_key', 'nds_gemini_key']);
+  await keystore.updateFlag();
+})().catch(e => console.warn('[NDS] key migration', e));
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg && msg.type === 'fetchText') {
     fetch(msg.url, { credentials: 'omit' })
@@ -52,7 +64,7 @@ async function gtranslate(text) {
 // auto-reload off, so it can't cost more than was bought. Raw HTTP because this
 // extension has no build step to bundle the SDK.
 async function claude({ system, prompt, schema }) {
-  const { nds_claude_key: key } = await chrome.storage.local.get('nds_claude_key');
+  const key = await keystore.get('claude');
   if (!key) throw new Error('no Claude API key');
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -107,7 +119,8 @@ const GEMINI = 'https://generativelanguage.googleapis.com/v1beta/';
 const THINKING = [{ thinkingLevel: 'minimal' }, { thinkingLevel: 'low' }, { thinkingBudget: 0 }, null];
 
 async function gemini({ system, prompt, schema, model }) {
-  const { nds_gemini_key: key, nds_gemini_thinking: thinking = {} } = await chrome.storage.local.get(['nds_gemini_key', 'nds_gemini_thinking']);
+  const key = await keystore.get('gemini');
+  const { nds_gemini_thinking: thinking = {} } = await chrome.storage.local.get('nds_gemini_thinking');
   if (!key) throw new Error('no Gemini API key');
   model = model || await geminiModel(key);
   const saved = thinking[model] || 0; // per model: which THINKING entry it accepts
@@ -166,7 +179,7 @@ async function geminiCandidates(key) {
 // Settings-page test: time one real-sized lookup on each candidate (stable ones first,
 // at most 5) and keep the fastest model that answered.
 async function geminiBench(msg) {
-  const { nds_gemini_key: key } = await chrome.storage.local.get('nds_gemini_key');
+  const key = await keystore.get('gemini');
   if (!key) throw new Error('no Gemini API key');
   const results = [];
   for (const model of (await geminiCandidates(key)).slice(0, 5)) {

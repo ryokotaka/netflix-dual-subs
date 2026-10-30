@@ -99,18 +99,16 @@
     S.settings[k] = e.target.checked; saveSettings(); applySettings();
     if (k === 'jaOfficial') applyJaMode();
   });
-  // The AI keys are entered on the extension's options page (Netflix's player swallows
-  // typing and pasting in fields on its page); this just shows which AI is in use:
-  // Claude if it has a key, else Gemini, else Chrome's built-in model.
-  const KEY_NAMES = ['nds_claude_key', 'nds_gemini_key'], keys = {};
-  const setKey = (name, value) => {
-    keys[name] = value || '';
-    S.ai = keys.nds_claude_key ? 'claude' : keys.nds_gemini_key ? 'gemini' : '';
+  // The AI keys are entered on the extension's options page and never come into this
+  // page: background.js holds them (keystore.js). Here we only get the flag nds_ai saying
+  // which AI is set up: Claude, else Gemini, else Chrome's built-in model.
+  const setAi = ai => {
+    S.ai = ai || '';
     $('.nds-gstate', root).textContent = { claude: 'Claude Haiku', gemini: 'Gemini（無料枠）', '': 'Chrome 内蔵AI' }[S.ai];
     ctxCache.clear();
   };
   $('.nds-gset', root).onclick = () => (alive() ? chrome.runtime.sendMessage({ type: 'openOptions' }) : orphaned());
-  chrome.storage.onChanged.addListener(ch => { for (const k of KEY_NAMES) if (ch[k]) setKey(k, ch[k].newValue); });
+  chrome.storage.onChanged.addListener(ch => { if (ch.nds_ai) setAi(ch.nds_ai.newValue); });
   $('.nds-gear', root).onclick = () => { settingsBox.hidden = !settingsBox.hidden; };
   $('.nds-close', root).onclick = () => togglePanel(false);
   $('#nds-open', root).onclick = () => togglePanel(true);
@@ -668,10 +666,10 @@
     root.appendChild(f); setTimeout(() => f.remove(), 1200);
   }
 
-  chrome.storage.local.get(['nds_settings', 'nds_saved', ...KEY_NAMES], r => {
+  chrome.storage.local.get(['nds_settings', 'nds_saved', 'nds_ai'], r => {
     Object.assign(S.settings, r.nds_settings || {});
     S.saved = r.nds_saved || [];
-    for (const k of KEY_NAMES) setKey(k, r[k]);
+    setAi(r.nds_ai);
     applySettings(); applyJaMode();
   });
   applySettings();
