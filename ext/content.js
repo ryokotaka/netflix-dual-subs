@@ -72,7 +72,7 @@
         <label>字幕の大きさ <select data-k="subSize"><option value="0.8">小</option><option value="1">中</option><option value="1.25">大</option><option value="1.5">特大</option></select></label>
         <label>字幕の位置 <select data-k="subPos"><option value="4">一番下</option><option value="9">下</option><option value="18">少し上</option><option value="28">上</option></select></label>
         <div class="nds-gk">単語の解説：<span class="nds-gstate"></span> <button class="nds-gset">APIキーを設定</button></div>
-        <div class="nds-keys">A 前の文 ・ S もう一度 ・ D 次の文 ・ R この文をリピート ・ J 日本語を見る ・ Q 1文ごとに止める ・ P パネル</div>
+        <div class="nds-keys">、前の文 ／ 。もう一度 ／ ・次の文 ／ R この文をリピート ／ J 日本語を見る ／ Q 1文ごとに止める ／ P パネル</div>
       </div>
       <div class="nds-status"></div>
       <div class="nds-list"></div>
@@ -842,8 +842,10 @@
     if (!watchId() || e.ctrlKey || e.metaKey || e.altKey) return;
     const tag = (e.target && e.target.tagName) || '';
     if (/INPUT|TEXTAREA|SELECT/.test(tag) || (e.target && e.target.isContentEditable)) return;
-    const key = e.key.toLowerCase();
-    if (!['a', 's', 'd', 'q', 'p', 'j', 'r'].includes(key)) return;
+    // by physical key (e.code), so it works with Japanese input on: line moves are the
+    // 、。・ keys (Comma / Period / Slash on a JIS keyboard)
+    const key = { Comma: 'prev', Period: 'again', Slash: 'next', KeyQ: 'q', KeyP: 'p', KeyJ: 'j', KeyR: 'r' }[e.code];
+    if (!key) return;
     e.preventDefault(); e.stopImmediatePropagation();
     if (key === 'p') return togglePanel();
     // check your understanding: show this line's Japanese (also under the video) until the next line
@@ -854,8 +856,8 @@
     const v = video();
     if (key === 'r') { setRepeat(S.repeat >= 0 ? -1 : cur); if (v && v.paused) v.play(); return; }
     let target = cur;
-    if (key === 'a') target = (S.cues[cur] && t - S.cues[cur].start > 1500) ? cur : Math.max(0, cur - 1);
-    if (key === 'd') target = Math.min(S.cues.length - 1, cur + 1);
+    if (key === 'prev') target = (S.cues[cur] && t - S.cues[cur].start > 1500) ? cur : Math.max(0, cur - 1);
+    if (key === 'next') target = Math.min(S.cues.length - 1, cur + 1);
     seekToCue(target);
     if (v && v.paused) v.play();
   }, true);
