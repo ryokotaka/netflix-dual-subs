@@ -2,9 +2,11 @@
 
 Language Reactor風の自分用Chrome拡張機能。
 
-- 英語＋日本語の二重字幕（Netflix公式の日本語字幕があればそれを、なければChrome内蔵の翻訳APIで機械翻訳）
+- 英語＋日本語の二重字幕（日本語は機械翻訳：Google翻訳の無料版、使えないときはChrome内蔵の翻訳。⚙ でNetflix公式の日本語字幕にも切り替え可）
 - 右側の字幕一覧（クリックでその場面へジャンプ）
-- 単語にカーソルで意味を表示、熟語（figure it out / come up with など）も判定
+- 単語にカーソルで意味を表示、熟語（figure it out / come up with など）も判定。下の字幕でも右の一覧でも使える
+- AIによる「この文での意味・使われ方・よく使う形・例文」（⚙ の「APIキーを設定」で開く設定ページに Claude APIキーを入れると Claude Haiku、Gemini APIキーなら Gemini Flash-Lite、どちらも無ければ Chrome 内蔵AI）
+- 右の日本語は普段ぼかし、カーソルを合わせると表示
 - ☆で単語を保存、Anki用CSVを書き出し
 - ショートカット：A 前の文 / S もう一度 / D 次の文 / Q 自動一時停止 / P パネル
 

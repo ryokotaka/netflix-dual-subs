@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>Netflix Dual Subs 設定</title>
+<style>
+  body { margin: 0; background: #16161a; color: #f2f2f2; font: 15px/1.6 -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; }
+  main { max-width: 560px; margin: 48px auto; padding: 0 16px; }
+  h1 { font-size: 20px; }
+  label { display: block; margin-top: 20px; font-weight: 600; }
+  input { display: block; width: 100%; box-sizing: border-box; margin-top: 6px; padding: 8px 10px; border-radius: 8px;
+    border: 1px solid #3a3a44; background: #222229; color: inherit; font: inherit; }
+  .row { display: flex; gap: 8px; margin-top: 12px; }
+  button { padding: 6px 14px; border-radius: 8px; border: 1px solid #b57bff; background: none; color: inherit; font: inherit; cursor: pointer; }
+  #status, .st { margin-top: 12px; min-height: 1.6em; white-space: pre-line; }
+  .ok { color: #7bd88f; } .ng { color: #ff7b7b; }
+  .note { color: #a8a8b3; font-size: 13px; margin-top: 24px; }
+  h2 { font-size: 16px; margin-top: 36px; }
+  #usage { color: #f2f2f2; font-size: 14px; }
+  #recent { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
+  #recent th, #recent td { text-align: left; padding: 3px 6px; border-bottom: 1px solid #2e2e36; }
+  #recent td.n, #recent th.n { text-align: right; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Netflix Dual Subs 設定</h1>
+  <p class="note" style="margin-top:0">単語の解説に使うAI：Claude のキーがあれば Claude Haiku（速い）、無ければ Gemini、どちらも無ければ Chrome 内蔵AI。</p>
+
+  <label for="ckey">Claude APIキー（おすすめ）</label>
+  <input id="ckey" type="password" placeholder="sk-ant-..." autocomplete="off">
+  <div class="row">
+    <button id="csave">保存</button>
+    <button id="ctest">保存してテスト</button>
+    <button id="cclear">削除</button>
+  </div>
+  <div id="cstatus" class="st"></div>
+  <div class="note">
+    キーは <a href="https://platform.claude.com/settings/keys" target="_blank" style="color:#b57bff">Claude Console</a> で作成。
+    クレジットは前払い（Billing で購入）。<b>自動チャージ（auto-reload）をオンにしなければ、買った分以上はかかりません</b>。
+    残高がなくなると止まるだけです。送った内容はAIの学習には使われません。
+  </div>
+
+  <h2>Claude の使用量（この拡張で記録）</h2>
+  <div id="usage" class="note" style="margin-top:0"></div>
+  <table id="recent"></table>
+  <div class="row"><button id="ureset">記録をリセット</button></div>
+  <div class="note">
+    Claude が毎回返すトークン数から、Haiku 5.5 の料金（入力 $0.10・出力 $0.50 / 100万トークン）で計算した目安です。
+    実際の請求は Claude Console の「支出」で確認できます（セント単位・反映に数分）。
+  </div>
+
+  <label for="key">Gemini APIキー（無料・混雑時は遅い）</label>
+  <input id="key" type="password" placeholder="Google AI Studio の APIキー" autocomplete="off">
+  <div class="row">
+    <button id="save">保存</button>
+    <button id="test">保存してテスト</button>
+    <button id="clear">削除（Chrome内蔵AIに戻す）</button>
+  </div>
+  <div id="status"></div>
+  <div class="note">
+    キーは <a href="https://aistudio.google.com/apikey" target="_blank" style="color:#b57bff">Google AI Studio</a> で作成できます。
+    プロジェクトに請求先（Billing）を設定しなければ無料枠だけが使われ、料金はかかりません（「Set up billing」は押さない）。
+    無料枠では、送った字幕の文や単語がGoogleのサービス改善に使われることがあります。キーはこのPCのChromeにだけ保存されます。
+  </div>
+</main>
+<script src="options.js"></script>
+</body>
+</html>
