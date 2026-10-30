@@ -520,7 +520,6 @@
   }
   pop.addEventListener('click', e => {
     if (e.target.closest('.nds-dmore')) { $('.nds-dict', pop).classList.remove('nds-folded'); e.target.remove(); return; }
-    if (e.target.closest('.nds-ask')) { if (hoverCtx) askContext(hoverCtx, true); return; }
     if (e.target.closest('.nds-lm')) { const ctx = hoverCtx; lmInit(true).then(() => { if (ctx && hoverCtx === ctx) askContext(ctx, true); }); return; }
     const b = e.target.closest('.nds-star'); if (!b || !hoverCtx) return;
     const head = b.dataset.head;
@@ -616,8 +615,8 @@
     }
   }
 
-  // request=false (hover): show a saved answer if there is one, otherwise the ask button.
-  // request=true (click on the word or the button): ask the AI.
+  // request=false (hover): show a saved answer if there is one, otherwise nothing.
+  // request=true (click on the word): ask the AI.
   async function askContext(ctx, request) {
     const box = $('.nds-ctx', pop); if (!box) return;
     const key = ctxKey(ctx);
@@ -626,11 +625,7 @@
       if (hoverCtx === ctx) { box.innerHTML = infoHtml(info); if (popAnchor) placePop(popAnchor); } // it got taller
     };
     if (ctxStore[key]) return show(ctxStore[key].info);
-    if (!request && !ctxCache.has(key)) {
-      const cost = S.ai === 'claude' ? '・約0.02円' : '・無料';
-      box.innerHTML = `<button class="nds-ask">AIで解説（この文での意味・使われ方${cost}）</button>`;
-      return;
-    }
+    if (!request && !ctxCache.has(key)) { box.innerHTML = ''; return; } // nothing until the word is clicked
     if (!S.ai) { // Chrome's built-in model: may still need setting up
       if (lmState === 'unknown') await lmInit(false);
       if (hoverCtx !== ctx) return;
