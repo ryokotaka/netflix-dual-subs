@@ -10,6 +10,7 @@
     cues: [],          // {start, end, en, ja (shown), jaNf (Netflix's), jaMt (machine)}
     jaSource: 'none',  // 'netflix' | 'machine' | 'none'
     hasOfficialJa: false,
+    repeat: -1, repeatAt: 0, hold: null, // R loop / line held after a jump
     googleFailedAt: 0,
     source: 'none',    // 'track' | 'dom'
     idx: -1,
@@ -71,7 +72,7 @@
         <label>字幕の大きさ <select data-k="subSize"><option value="0.8">小</option><option value="1">中</option><option value="1.25">大</option><option value="1.5">特大</option></select></label>
         <label>字幕の位置 <select data-k="subPos"><option value="4">一番下</option><option value="9">下</option><option value="18">少し上</option><option value="28">上</option></select></label>
         <div class="nds-gk">単語の解説：<span class="nds-gstate"></span> <button class="nds-gset">APIキーを設定</button></div>
-        <div class="nds-keys">A 前の文 ・ S もう一度 ・ D 次の文 ・ J 日本語を見る ・ Q 1文ごとに止める ・ P パネル</div>
+        <div class="nds-keys">A 前の文 ・ S もう一度 ・ D 次の文 ・ R この文をリピート ・ J 日本語を見る ・ Q 1文ごとに止める ・ P パネル</div>
       </div>
       <div class="nds-status"></div>
       <div class="nds-list"></div>
@@ -155,7 +156,7 @@
   list.addEventListener('click', e => {
     if (e.target.closest('.nds-w')) { if (hoverCtx) askContext(hoverCtx, true); return; } // word: ask the AI
     const row = e.target.closest('.nds-row'); if (!row) return;
-    const c = S.cues[+row.dataset.k]; if (c) { S.pausedAt = -1; seek(c.start); }
+    seekToCue(+row.dataset.k);
   });
   function updateRowJa(k) {
     const r = list.querySelector(`.nds-row[data-k="${k}"] .nds-rja`);
@@ -214,12 +215,21 @@
     if (!S.cues.length) return;
     const v = video(); if (!v) return;
     const t = nowMs();
+    // R: loop one line (going far from it, e.g. with Netflix's own seek bar, ends the loop)
+    if (S.repeat >= 0 && !v.paused) {
+      const c = S.cues[S.repeat];
+      if (!c || t < c.start - 2000 || t > c.end + 2000) setRepeat(-1);
+      else if (t >= c.end + 150 && Date.now() - S.repeatAt > 800) { S.repeatAt = Date.now(); seekToCue(S.repeat); return; }
+    }
     // auto-pause at the end of the line that was playing
-    if (S.settings.autoPause && S.idx >= 0 && !v.paused && S.pausedAt !== S.idx) {
+    if (S.settings.autoPause && S.repeat < 0 && S.idx >= 0 && !v.paused && S.pausedAt !== S.idx) {
       const c = S.cues[S.idx];
       if (t >= c.end - 60 && t < c.end + 400) { v.pause(); S.pausedAt = S.idx; }
     }
-    const k = currentIndex(t);
+    let k = currentIndex(t);
+    if (S.hold) { // right after a jump: keep the target line even if Netflix landed a bit early
+      if (Date.now() > S.hold.until || k >= S.hold.idx) S.hold = null; else k = S.hold.idx;
+    }
     if (k !== S.idx) {
       S.idx = k;
       root.classList.remove('nds-reveal'); // J shows the Japanese of one line only
@@ -248,7 +258,7 @@
 
   let domTimer = null;
   function startMovie(id) {
-    S.movieId = id; S.cues = []; S.idx = -1; S.source = 'none'; S.jaSource = 'none'; S.hasOfficialJa = false; S.pausedAt = -1;
+    S.movieId = id; S.cues = []; S.idx = -1; S.source = 'none'; S.jaSource = 'none'; S.hasOfficialJa = false; S.pausedAt = -1; S.hold = null; if (S.repeat >= 0) setRepeat(-1);
     list.innerHTML = ''; renderSub(); applySettings();
     setStatus('字幕を読み込み中…');
     clearTimeout(domTimer);
@@ -720,7 +730,8 @@
   function goToSaved(s) {
     if (!s || s.time == null) return;
     if (String(s.movieId) === S.movieId) {
-      S.pausedAt = -1; seek(Math.max(0, s.time - 300));
+      const k = S.cues.findIndex(c => c.start === s.time);
+      if (k >= 0) seekToCue(k); else { S.pausedAt = -1; seek(Math.max(0, s.time - 300)); }
       const v = video(); if (v && v.paused) v.play();
       return;
     }
@@ -733,7 +744,10 @@
     chrome.storage.local.get('nds_pending_seek', ({ nds_pending_seek: p }) => {
       if (!p || p.movieId !== id || Date.now() - p.at > 5 * 60 * 1000) return;
       chrome.storage.local.remove('nds_pending_seek');
-      setTimeout(() => seek(Math.max(0, p.time - 300)), 1500); // let the player settle first
+      setTimeout(() => { // let the player settle first
+        const k = S.cues.findIndex(c => c.start === p.time);
+        if (k >= 0) seekToCue(k); else seek(Math.max(0, p.time - 300));
+      }, 1500);
     });
   }
 
@@ -829,21 +843,38 @@
     const tag = (e.target && e.target.tagName) || '';
     if (/INPUT|TEXTAREA|SELECT/.test(tag) || (e.target && e.target.isContentEditable)) return;
     const key = e.key.toLowerCase();
-    if (!['a', 's', 'd', 'q', 'p', 'j'].includes(key)) return;
+    if (!['a', 's', 'd', 'q', 'p', 'j', 'r'].includes(key)) return;
     e.preventDefault(); e.stopImmediatePropagation();
     if (key === 'p') return togglePanel();
     // check your understanding: show this line's Japanese (also under the video) until the next line
     if (key === 'j') return root.classList.toggle('nds-reveal');
     if (key === 'q') { S.settings.autoPause = !S.settings.autoPause; saveSettings(); applySettings(); flash(S.settings.autoPause ? '自動一時停止 ON' : '自動一時停止 OFF'); return; }
     if (!S.cues.length) return;
-    const t = nowMs(), cur = Math.max(0, currentIndex(t));
+    const t = nowMs(), cur = S.idx >= 0 ? S.idx : Math.max(0, currentIndex(t)); // the line shown
+    const v = video();
+    if (key === 'r') { setRepeat(S.repeat >= 0 ? -1 : cur); if (v && v.paused) v.play(); return; }
     let target = cur;
     if (key === 'a') target = (S.cues[cur] && t - S.cues[cur].start > 1500) ? cur : Math.max(0, cur - 1);
-    if (key === 'd') target = Math.min(S.cues.length - 1, currentIndex(t) + 1);
-    S.pausedAt = -1;
-    seek(S.cues[target].start);
-    const v = video(); if (v && v.paused) v.play();
+    if (key === 'd') target = Math.min(S.cues.length - 1, cur + 1);
+    seekToCue(target);
+    if (v && v.paused) v.play();
   }, true);
+
+  // Jump to a line. Netflix may land a little before its start, which would make the
+  // previous line current for a moment (the list jumps up and back), so hold this line
+  // as current until playback reaches it (at most 1.5 s).
+  function seekToCue(k) {
+    const c = S.cues[k]; if (!c) return;
+    S.pausedAt = -1;
+    S.hold = { idx: k, until: Date.now() + 1500 };
+    if (S.repeat >= 0) S.repeat = k; // looping follows the line you go to
+    seek(c.start);
+  }
+  function setRepeat(k) {
+    S.repeat = k;
+    root.classList.toggle('nds-repeating', k >= 0);
+    flash(k >= 0 ? 'この文をリピート（R でやめる）' : 'リピート OFF');
+  }
 
   function flash(msg) {
     const f = document.createElement('div'); f.className = 'nds-flash'; f.textContent = msg;

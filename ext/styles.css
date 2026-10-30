@@ -145,3 +145,5 @@ html.nds-panel-open [data-uia="video-canvas"] video { width: 100% !important; }
 /* Netflix's "You're watching ..." overlay covers the frame a few seconds into every
    pause - and pausing to study (Q, word lookups) is the point here */
 html.nds-active .watch-video--evidence-overlay-container { display: none !important; }
+/* R: the looping line */
+#nds-root.nds-repeating .nds-row.on .nds-t::after { content: '↻'; display: block; color: var(--nds-accent); font-size: 14px; }
