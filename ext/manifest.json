@@ -4,7 +4,11 @@
   "version": "0.1.0",
   "description": "英語＋日本語の二重字幕、字幕一覧、熟語対応のホバー辞書。自分用。",
   "permissions": [
-    "storage"
+    "storage",
+    "unlimitedStorage",
+    "downloads",
+    "downloads.ui",
+    "alarms"
   ],
   "host_permissions": [
     "https://www.netflix.com/*",

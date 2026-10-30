@@ -41,6 +41,18 @@
     残高がなくなると止まるだけです。送った内容はAIの学習には使われません。
   </div>
 
+  <h2>バックアップ</h2>
+  <div class="note" style="margin-top:0">
+    保存した単語・調べた単語の履歴・AIの解説・設定を、ダウンロードフォルダの <b>NetflixDualSubs/backup.json</b> に1日1回（変更があったとき）自動で保存します。
+    月が変わると backup-年-月.json も残します。<b>APIキーは含めません</b>（復元後に入れ直してください）。
+  </div>
+  <div class="row">
+    <button id="bnow">今すぐバックアップ</button>
+    <button id="bpick">バックアップから復元…</button>
+    <input id="bfile" type="file" accept=".json,application/json" hidden>
+  </div>
+  <div id="bstatus" class="st"></div>
+
   <h2>Claude の使用量（この拡張で記録）</h2>
   <div id="usage" class="note" style="margin-top:0"></div>
   <table id="recent"></table>

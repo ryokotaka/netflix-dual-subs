@@ -113,3 +113,27 @@ function showUsage(s) {
 chrome.storage.local.get('nds_usage', r => showUsage(r.nds_usage));
 chrome.storage.onChanged.addListener(ch => { if (ch.nds_usage) showUsage(ch.nds_usage.newValue); });
 $('ureset').onclick = () => chrome.storage.local.remove('nds_usage');
+
+// ---------- backup / restore (done by background.js) ----------
+const bstatus = show('bstatus');
+function showLastBackup() {
+  chrome.storage.local.get('nds_backup', ({ nds_backup: b }) => {
+    if (!$('bstatus').textContent) bstatus(b ? `前回のバックアップ：${new Date(b.at).toLocaleString('ja-JP')}` : 'まだバックアップはありません');
+  });
+}
+showLastBackup();
+$('bnow').onclick = async () => {
+  bstatus('バックアップ中…');
+  const r = await chrome.runtime.sendMessage({ type: 'backupNow' });
+  bstatus(r && r.ok ? `保存しました（ダウンロード › NetflixDualSubs › backup.json${r.n > 1 ? ' と今月分' : ''}）` : 'エラー：' + (r ? r.error : 'no response'), !!(r && r.ok));
+};
+$('bpick').onclick = () => $('bfile').click();
+$('bfile').onchange = async () => {
+  const f = $('bfile').files[0]; if (!f) return;
+  let backup;
+  try { backup = JSON.parse(await f.text()); } catch (e) { return bstatus('JSON として読めませんでした', false); }
+  const r = await chrome.runtime.sendMessage({ type: 'restore', backup });
+  $('bfile').value = '';
+  bstatus(r && r.ok ? `復元しました：保存した単語 ${r.saved}件・履歴 ${r.history}件・AIの解説 ${r.ctx}件（今あるデータと合わせています）`
+    : 'エラー：' + (r ? r.error : 'no response'), !!(r && r.ok));
+};

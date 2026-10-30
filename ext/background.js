@@ -42,6 +42,14 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       .catch(e => sendResponse({ ok: false, error: String(e) }));
     return true;
   }
+  if (msg && msg.type === 'backupNow') {
+    writeBackup(true).then(n => sendResponse({ ok: true, n })).catch(e => sendResponse({ ok: false, error: String(e) }));
+    return true;
+  }
+  if (msg && msg.type === 'restore') {
+    restoreBackup(msg.backup).then(r => sendResponse({ ok: true, ...r })).catch(e => sendResponse({ ok: false, error: String(e) }));
+    return true;
+  }
   if (msg && msg.type === 'gtranslate') {
     gtranslateLines(msg.texts)
       .then(texts => sendResponse({ ok: true, texts }))
@@ -204,4 +212,77 @@ async function gtranslateLines(lines) {
   const each = [];
   for (const l of lines) each.push((await gtranslate(l)).trim());
   return each;
+}
+
+// ---------- backup (learning data → Downloads/NetflixDualSubs) ----------
+// Everything you'd hate to lose, except the API keys (a file in Downloads is no place
+// for them). Written once a day when something changed, plus from the settings page.
+const BACKUP_KEYS = ['nds_saved', 'nds_history', 'nds_ctx', 'nds_settings', 'nds_usage'];
+const BACKUP_DIR = 'NetflixDualSubs/';
+
+async function backupData() {
+  const data = await chrome.storage.local.get(BACKUP_KEYS);
+  return { app: 'netflix-dual-subs', version: 1, at: new Date().toISOString(), data };
+}
+
+// Writes backup.json (overwritten each time) and, the first time each month, a dated
+// copy too, so a bad day can't wipe out the only good backup. Returns the file count.
+async function writeBackup(force) {
+  const backup = await backupData();
+  const json = JSON.stringify(backup);
+  const sig = String(json.length) + ':' + hash(JSON.stringify(backup.data));
+  const { nds_backup: last = {} } = await chrome.storage.local.get('nds_backup');
+  if (!force && last.sig === sig) return 0; // nothing changed since the last backup
+  const month = backup.at.slice(0, 7);
+  const files = ['backup.json'];
+  if (last.month !== month) files.push(`backup-${month}.json`);
+  for (const f of files) await download(json, BACKUP_DIR + f);
+  await chrome.storage.local.set({ nds_backup: { sig, month, at: Date.now() } });
+  return files.length;
+}
+
+function hash(s) { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return h; }
+
+// chrome.downloads without the download bubble popping up for a daily background save.
+async function download(text, filename) {
+  const bytes = new TextEncoder().encode(text);
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  const url = 'data:application/json;base64,' + btoa(bin);
+  try { await chrome.downloads.setUiOptions({ enabled: false }); } catch (e) { /* bubble shows; harmless */ }
+  try {
+    const id = await chrome.downloads.download({ url, filename, conflictAction: 'overwrite', saveAs: false });
+    await new Promise(resolve => {
+      const done = d => { if (d.id === id && d.state && d.state.current !== 'in_progress') { chrome.downloads.onChanged.removeListener(done); resolve(); } };
+      chrome.downloads.onChanged.addListener(done);
+      setTimeout(resolve, 10000);
+    });
+    try { await chrome.downloads.erase({ id }); } catch (e) { /* keep it in the list then */ } // keeps Chrome's download list clean; the file stays
+  } finally {
+    try { await chrome.downloads.setUiOptions({ enabled: true }); } catch (e) { /* ignore */ }
+  }
+}
+
+chrome.alarms.get('nds-backup').then(a => { if (!a) chrome.alarms.create('nds-backup', { periodInMinutes: 24 * 60, delayInMinutes: 1 }); });
+chrome.alarms.onAlarm.addListener(a => { if (a.name === 'nds-backup') writeBackup(false).catch(e => console.warn('[NDS] backup', e)); });
+
+// Restore merges into what's there: saved words / history by their scene, AI answers by key.
+async function restoreBackup(backup) {
+  if (!backup || backup.app !== 'netflix-dual-subs' || !backup.data) throw new Error('not a Netflix Dual Subs backup');
+  const cur = await chrome.storage.local.get(BACKUP_KEYS);
+  const b = backup.data;
+  const sceneKey = s => `${s.head}|${s.movieId}|${s.time}`;
+  const mergeList = (a = [], c = []) => {
+    const seen = new Set(a.map(sceneKey));
+    return [...a, ...c.filter(s => !seen.has(sceneKey(s)))].sort((x, y) => (y.at || 0) - (x.at || 0));
+  };
+  const out = {
+    nds_saved: mergeList(cur.nds_saved, b.nds_saved),
+    nds_history: mergeList(cur.nds_history, b.nds_history),
+    nds_ctx: { ...(b.nds_ctx || {}), ...(cur.nds_ctx || {}) },
+    nds_settings: { ...(b.nds_settings || {}), ...(cur.nds_settings || {}) },
+  };
+  if (!cur.nds_usage && b.nds_usage) out.nds_usage = b.nds_usage;
+  await chrome.storage.local.set(out);
+  return { saved: out.nds_saved.length, history: out.nds_history.length, ctx: Object.keys(out.nds_ctx).length };
 }

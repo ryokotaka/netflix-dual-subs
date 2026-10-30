@@ -55,6 +55,7 @@
         <button data-tab="subs" class="on">字幕</button>
         <button data-tab="saved">保存</button>
         <button data-tab="quiz">復習<span class="nds-due"></span></button>
+        <button data-tab="hist">履歴</button>
         <span class="nds-sp"></span>
         <button class="nds-gear" title="設定">⚙</button>
         <button class="nds-close" title="パネルを閉じる">✕</button>
@@ -78,12 +79,13 @@
       <div class="nds-list"></div>
       <div class="nds-saved" hidden></div>
       <div class="nds-quiz" hidden></div>
+      <div class="nds-hist" hidden></div>
     </div>
     <button id="nds-open" title="字幕パネル (P)">字</button>
     <div id="nds-pop" hidden></div>`;
 
   const subEn = $('.nds-en', root), subJa = $('.nds-ja', root), panel = $('#nds-panel', root);
-  const list = $('.nds-list', root), savedBox = $('.nds-saved', root), quizBox = $('.nds-quiz', root), pop = $('#nds-pop', root);
+  const list = $('.nds-list', root), savedBox = $('.nds-saved', root), quizBox = $('.nds-quiz', root), histBox = $('.nds-hist', root), pop = $('#nds-pop', root);
   const statusEl = $('.nds-status', root), settingsBox = $('.nds-settings', root);
 
   function mount() {
@@ -134,8 +136,10 @@
     list.hidden = b.dataset.tab !== 'subs';
     savedBox.hidden = b.dataset.tab !== 'saved';
     quizBox.hidden = b.dataset.tab !== 'quiz';
+    histBox.hidden = b.dataset.tab !== 'hist';
     if (!savedBox.hidden) renderSaved();
     if (!quizBox.hidden) nextQuiz();
+    if (!histBox.hidden) renderHistory();
   });
   // stop Netflix from treating clicks/keys inside our UI as player input
   for (const ev of ['click', 'mousedown', 'mouseup', 'dblclick', 'wheel']) {
@@ -669,6 +673,7 @@
     box.textContent = 'この文での使われ方：考え中…';
     try {
       show(await ctxCache.get(key));
+      if (request) recordHistory(ctx, ctx.ctxInfo);
     } catch (e) {
       console.warn('[NDS] context meaning', e);
       ctxCache.delete(key);
@@ -769,6 +774,46 @@
       }, 1500);
     });
   }
+
+  // ---------- history: every word you clicked for an AI explanation ----------
+  // A click means "I didn't know this here", so these are kept (newest first, 20000 max)
+  // apart from ☆, to look back on, jump to, or star later.
+  const sceneKey = x => `${x.head}|${x.movieId}|${x.time}`;
+  function recordHistory(ctx, info) {
+    if (!alive() || !info) return;
+    const e = { head: (ctx.phrase || ctx.word || {}).head || ctx.target, ctx: info.meaning, info,
+      context: ctx.cue.en.replace(/\n/g, ' '), ja: (ctx.cue.ja || '').replace(/\n/g, ' '),
+      movieId: S.movieId, title: S.title || '', time: ctx.cue.start, at: Date.now() };
+    chrome.storage.local.get('nds_history', ({ nds_history: h = [] }) => {
+      chrome.storage.local.set({ nds_history: [e, ...h.filter(x => sceneKey(x) !== sceneKey(e))].slice(0, 20000) });
+    });
+  }
+  let history = [];
+  function renderHistory() {
+    if (!alive()) return;
+    chrome.storage.local.get('nds_history', ({ nds_history: h = [] }) => {
+      history = h;
+      if (!h.length) { histBox.innerHTML = '<div class="nds-empty">単語をクリックしてAIの解説を出すと、ここに残ります</div>'; return; }
+      const starred = new Set(S.saved.map(sceneKey));
+      histBox.innerHTML = `<div class="nds-sbar">${h.length}件（クリックして調べた単語）</div>` +
+        h.slice(0, 300).map((x, k) => `<div class="nds-srow"><div><b>${esc(x.head)}</b> <span class="nds-sm">${esc(x.ctx || '')}</span></div>` +
+          `<div class="nds-sc">${esc(x.context)}</div>` +
+          `<button class="nds-go" data-k="${k}">▶ ${esc(x.title ? x.title + ' ' : '')}${fmt(x.time)}</button>` +
+          `<button class="nds-hstar${starred.has(sceneKey(x)) ? ' on' : ''}" data-k="${k}" title="☆ 保存して復習に入れる">${starred.has(sceneKey(x)) ? '★' : '☆'}</button></div>`).join('');
+    });
+  }
+  histBox.addEventListener('click', e => {
+    const go = e.target.closest('.nds-go');
+    if (go) return goToSaved(history[+go.dataset.k]);
+    const st = e.target.closest('.nds-hstar');
+    if (!st || st.classList.contains('on')) return;
+    const x = history[+st.dataset.k];
+    const w = S.dict && N.lookupWord(S.dict, x.head.split(' ')[0]);
+    S.saved.unshift({ head: x.head, mean: (x.head.includes(' ') ? '' : w && w.mean) || x.ctx || '', ctx: x.ctx, info: x.info,
+      context: x.context, ja: x.ja, movieId: x.movieId, title: x.title, time: x.time, at: Date.now() });
+    saveSaved();
+    st.textContent = '★'; st.classList.add('on');
+  });
 
   // ---------- review quiz (from saved words; no AI calls) ----------
   // Spaced repetition: a right answer moves the word up a box and pushes its next
