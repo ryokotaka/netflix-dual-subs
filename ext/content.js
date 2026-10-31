@@ -591,7 +591,11 @@
     'その語を学ぶのに役立つ情報を、この場面での使われ方を中心に答えてください。' +
     'meaning: この文での意味（日本語、20文字以内）。usage: この場面での使われ方・ニュアンス・話し手の気持ち（日本語、60文字以内）。' +
     'pattern: よく使う形やコロケーション（英語、～で可変部分）。' +
-    'example: patternを使った短く自然な英語の例文。exampleJa: その日本語訳。';
+    'example: patternを使った短く自然な英語の例文。exampleJa: その日本語訳。' +
+    'toFriend / toColleague / toSuperior: 学習者がこの意味・言い方を友人／同僚／上司など目上に使ってよいか' +
+    '（◎自然 ○使える △避けた方が無難 ×失礼・不適切）。polite: toSuperior が△か×のときだけ目上に使える英語の言い換え（短く）、それ以外は空文字。' +
+    'exampleTo: example を誰に向けた言い方として作ったか。';
+  const AUDIENCE = ['◎', '○', '△', '×'];
   const LM_SCHEMA = {
     type: 'object',
     properties: {
@@ -600,8 +604,14 @@
       pattern: { type: 'string' },
       example: { type: 'string' },
       exampleJa: { type: 'string' },
+      // who you could say it to: one symbol each, so it costs only a few tokens
+      toFriend: { type: 'string', enum: AUDIENCE },
+      toColleague: { type: 'string', enum: AUDIENCE },
+      toSuperior: { type: 'string', enum: AUDIENCE },
+      polite: { type: 'string' },
+      exampleTo: { type: 'string', enum: ['友人に', '同僚に', '上司に', '誰でも'] },
     },
-    required: ['meaning', 'usage', 'pattern', 'example', 'exampleJa'],
+    required: ['meaning', 'usage', 'pattern', 'example', 'exampleJa', 'toFriend', 'toColleague', 'toSuperior', 'polite', 'exampleTo'],
     additionalProperties: false,
   };
   const ctxCache = new Map(); // ctxKey -> Promise<info object (LM_SCHEMA)>, requests in flight / this page
@@ -701,7 +711,8 @@
   // Claude / Gemini APIs through background.js (it holds the keys).
   const GEMINI_SCHEMA = { // Gemini's schema dialect
     type: 'OBJECT',
-    properties: Object.fromEntries(LM_SCHEMA.required.map(k => [k, { type: 'STRING' }])),
+    properties: Object.fromEntries(LM_SCHEMA.required.map(k => [k, LM_SCHEMA.properties[k].enum
+      ? { type: 'STRING', enum: LM_SCHEMA.properties[k].enum } : { type: 'STRING' }])),
     required: LM_SCHEMA.required,
     propertyOrdering: LM_SCHEMA.required,
   };
@@ -718,9 +729,20 @@
     const row = (label, v) => (v ? `<div class="nds-ci"><span class="nds-cl">${label}</span>${v}</div>` : '');
     return `<div class="nds-cm"><span class="nds-kind">この文で</span> <b>${esc(info.meaning)}</b></div>` +
       row('使われ方', esc(info.usage)) +
+      row('使える相手', audienceHtml(info)) +
       row('よく使う形', esc(info.pattern)) +
-      row('例', info.example ? `${esc(info.example)}<div class="nds-cx">${esc(info.exampleJa || '')}</div>` : '');
+      row('例', info.example ? `${info.exampleTo ? `<span class="nds-to">&lt;${esc(info.exampleTo)}&gt;</span> ` : ''}` +
+        `${esc(info.example)}<div class="nds-cx">${esc(info.exampleJa || '')}</div>` : '');
   }
+  // "友人◎ 同僚○ 目上△" (+ what to say to a superior instead); answers saved before this had none
+  function audienceHtml(info) {
+    if (!info.toSuperior) return '';
+    const mark = m => `<span class="nds-aud${m === '△' || m === '×' ? ' ng' : ''}">${esc(m)}</span>`;
+    return `友人${mark(info.toFriend)} 同僚${mark(info.toColleague)} 目上${mark(info.toSuperior)}` +
+      (info.polite ? `<div class="nds-cx">目上には: ${esc(info.polite)}</div>` : '');
+  }
+  const audienceText = info => (info && info.toSuperior
+    ? `友人${info.toFriend} 同僚${info.toColleague} 目上${info.toSuperior}${info.polite ? `（目上には: ${info.polite}）` : ''}` : '');
 
   // ---------- saved words ----------
   function renderSaved() {
@@ -739,7 +761,8 @@
       const q = s => '"' + String(s).replace(/"/g, '""') + '"';
       const study = s => !s.info ? (s.ctx ? 'この文で: ' + s.ctx + '<br><br>' : '') :
         `この文で: ${s.info.meaning}<br>使われ方: ${s.info.usage}<br>` +
-        `よく使う形: ${s.info.pattern}<br>例: ${s.info.example} — ${s.info.exampleJa}<br><br>`;
+        (audienceText(s.info) ? `使える相手: ${audienceText(s.info)}<br>` : '') +
+        `よく使う形: ${s.info.pattern}<br>例: ${s.info.exampleTo ? `<${s.info.exampleTo}> ` : ''}${s.info.example} — ${s.info.exampleJa}<br><br>`;
       const csv = S.saved.map(s => [q(s.head), q(study(s) +
         s.mean.replace(/ \/ /g, '<br>') + '<br><br>' + s.context + (s.ja ? '<br>' + s.ja : ''))].join(',')).join('\n');
       const a = document.createElement('a');
@@ -869,6 +892,7 @@
     a.innerHTML = (correct === null ? '' : `<div class="${correct ? 'nds-ok' : 'nds-ng'}">${correct ? '正解！' : '残念…'}</div>`) +
       `<div><b>${esc(s.head)}</b>：${esc(meaningOf(s))}</div>` +
       (info ? `<div class="nds-ci"><span class="nds-cl">使われ方</span>${esc(info.usage)}</div>` +
+        (info.toSuperior ? `<div class="nds-ci"><span class="nds-cl">使える相手</span>${audienceHtml(info)}</div>` : '') +
         `<div class="nds-ci"><span class="nds-cl">例</span>${esc(info.example)}<div class="nds-cx">${esc(info.exampleJa)}</div></div>` : '') +
       (s.ja ? `<div class="nds-ci"><span class="nds-cl">訳</span>${esc(s.ja)}</div>` : '') +
       `<div class="nds-qbtns">${s.time != null ? '<button class="nds-qgo">▶ この場面を見る</button>' : ''}` +

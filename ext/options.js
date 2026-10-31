@@ -33,7 +33,11 @@ $('ctest').onclick = async () => {
       `（${e.match(/HTTP \d+/) || ''} ${detail.slice(0, 300)}）`, false);
   }
   let sample = '';
-  try { const j = JSON.parse(r.text); sample = `\n例「blend」→ ${j.meaning}／${j.usage}`; } catch (_) { /* ignore */ }
+  try {
+    const j = JSON.parse(r.text);
+    sample = `\n例「blend」→ ${j.meaning}／${j.usage}\n使える相手：友人${j.toFriend} 同僚${j.toColleague} 目上${j.toSuperior}` +
+      `${j.polite ? `（目上には: ${j.polite}）` : ''}\n例文 <${j.exampleTo}> ${j.example}`;
+  } catch (_) { /* ignore */ }
   cstatus(`OK：使えます（claude-haiku-5-5、${sec}秒）${sample}`, true);
 };
 
@@ -52,18 +56,22 @@ $('save').onclick = async () => { status((await save()) ? '保存しました' :
 $('clear').onclick = async () => { $('key').value = ''; await save(); status('削除しました（Chrome内蔵AIを使います）', true); };
 
 // A real-sized lookup (same instruction as content.js LM_SYSTEM) so the timing is realistic.
+const FIELDS = ['meaning', 'usage', 'pattern', 'example', 'exampleJa', 'toFriend', 'toColleague', 'toSuperior', 'polite', 'exampleTo'];
 const SAMPLE = {
   system: 'あなたは日本人の英語学習者を助ける先生です。英語の字幕の1文（前後の文つき）と、その中の単語または熟語が与えられます。' +
     'その語を学ぶのに役立つ情報を、この場面での使われ方を中心に答えてください。' +
     'meaning: この文での意味（日本語、20文字以内）。usage: この場面での使われ方・ニュアンス・話し手の気持ち（日本語、60文字以内）。' +
     'pattern: よく使う形やコロケーション（英語、～で可変部分）。' +
-    'example: patternを使った短く自然な英語の例文。exampleJa: その日本語訳。',
+    'example: patternを使った短く自然な英語の例文。exampleJa: その日本語訳。' +
+    'toFriend / toColleague / toSuperior: 学習者がこの意味・言い方を友人／同僚／上司など目上に使ってよいか' +
+    '（◎自然 ○使える △避けた方が無難 ×失礼・不適切）。polite: toSuperior が△か×のときだけ目上に使える英語の言い換え（短く）、それ以外は空文字。' +
+    'exampleTo: example を誰に向けた言い方として作ったか。',
   prompt: "前の文: I'm too white for the black kids and not white enough for the white kids.\n文: Girl, you gotta blend!\n" +
     '次の文: OK, my dude, you are putting so many toxic chemicals on your face.\n対象: blend',
   schema: {
     type: 'OBJECT',
-    properties: Object.fromEntries(['meaning', 'usage', 'pattern', 'example', 'exampleJa'].map(k => [k, { type: 'STRING' }])),
-    required: ['meaning', 'usage', 'pattern', 'example', 'exampleJa'],
+    properties: Object.fromEntries(FIELDS.map(k => [k, { type: 'STRING' }])),
+    required: FIELDS,
   },
 };
 

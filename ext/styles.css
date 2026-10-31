@@ -150,3 +150,7 @@ html.nds-active .watch-video--evidence-overlay-container { display: none !import
 /* history: star to move a looked-up word into the saved list */
 .nds-hstar { position: absolute; right: 8px; top: 6px; background: none; border: 0; font-size: 16px; color: var(--nds-dim) !important; }
 .nds-hstar.on { color: var(--nds-hl) !important; }
+/* who you can say it to: ◎○ plain, △× flagged */
+.nds-aud { display: inline-block; margin: 0 6px 0 1px; font-weight: 700; color: #7bd88f; }
+.nds-aud.ng { color: #ffb36b; }
+.nds-to { color: var(--nds-accent); font-size: 12px; }
