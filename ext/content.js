@@ -587,31 +587,33 @@
 
   // ---------- meaning in context (Chrome's built-in AI, Gemini Nano: free, on-device) ----------
   const LM_OPTS = { expectedInputs: [{ type: 'text', languages: ['en'] }], expectedOutputs: [{ type: 'text', languages: ['ja', 'en'] }] };
+  // The model fills the fields in this order, so who-can-you-say-it-to and the example's
+  // audience are decided before the example is written. The ratings are about the phrase
+  // itself (if you said it), not about this scene, which is usually casual.
   const LM_SYSTEM = 'あなたは日本人の英語学習者を助ける先生です。英語の字幕の1文（前後の文つき）と、その中の単語または熟語が与えられます。' +
-    'その語を学ぶのに役立つ情報を、この場面での使われ方を中心に答えてください。' +
+    'その語を学ぶのに役立つ情報を答えてください。' +
     'meaning: この文での意味（日本語、20文字以内）。usage: この場面での使われ方・ニュアンス・話し手の気持ち（日本語、60文字以内）。' +
+    'toFriend / toColleague / toSuperior: この場面に関係なく、この意味でのこの言い方を学習者自身が友人／同僚／上司など目上に言ってよいか' +
+    '（◎自然 ○使える △避けた方が無難 ×失礼・不適切）。' +
     'pattern: よく使う形やコロケーション（英語、～で可変部分）。' +
-    'example: patternを使った短く自然な英語の例文。exampleJa: その日本語訳。' +
-    'toFriend / toColleague / toSuperior: 学習者がこの意味・言い方を友人／同僚／上司など目上に使ってよいか' +
-    '（◎自然 ○使える △避けた方が無難 ×失礼・不適切）。polite: toSuperior が△か×のときだけ目上に使える英語の言い換え（短く）、それ以外は空文字。' +
-    'exampleTo: example を誰に向けた言い方として作ったか。';
+    'exampleTo: 例文を言う相手。toFriend / toColleague / toSuperior で◎か○の相手から選ぶ（どの相手にも自然なら 誰でも）。' +
+    'example: patternを使い、exampleTo の相手に言う短く自然な英語の例文。exampleJa: その日本語訳。';
   const AUDIENCE = ['◎', '○', '△', '×'];
   const LM_SCHEMA = {
     type: 'object',
     properties: {
       meaning: { type: 'string' },
       usage: { type: 'string' },
-      pattern: { type: 'string' },
-      example: { type: 'string' },
-      exampleJa: { type: 'string' },
       // who you could say it to: one symbol each, so it costs only a few tokens
       toFriend: { type: 'string', enum: AUDIENCE },
       toColleague: { type: 'string', enum: AUDIENCE },
       toSuperior: { type: 'string', enum: AUDIENCE },
-      polite: { type: 'string' },
+      pattern: { type: 'string' },
       exampleTo: { type: 'string', enum: ['友人に', '同僚に', '上司に', '誰でも'] },
+      example: { type: 'string' },
+      exampleJa: { type: 'string' },
     },
-    required: ['meaning', 'usage', 'pattern', 'example', 'exampleJa', 'toFriend', 'toColleague', 'toSuperior', 'polite', 'exampleTo'],
+    required: ['meaning', 'usage', 'toFriend', 'toColleague', 'toSuperior', 'pattern', 'exampleTo', 'example', 'exampleJa'],
     additionalProperties: false,
   };
   const ctxCache = new Map(); // ctxKey -> Promise<info object (LM_SCHEMA)>, requests in flight / this page
@@ -734,15 +736,13 @@
       row('例', info.example ? `${info.exampleTo ? `<span class="nds-to">&lt;${esc(info.exampleTo)}&gt;</span> ` : ''}` +
         `${esc(info.example)}<div class="nds-cx">${esc(info.exampleJa || '')}</div>` : '');
   }
-  // "友人◎ 同僚○ 目上△" (+ what to say to a superior instead); answers saved before this had none
+  // "友人◎ 同僚○ 目上△"; answers saved before this had none
   function audienceHtml(info) {
     if (!info.toSuperior) return '';
     const mark = m => `<span class="nds-aud${m === '△' || m === '×' ? ' ng' : ''}">${esc(m)}</span>`;
-    return `友人${mark(info.toFriend)} 同僚${mark(info.toColleague)} 目上${mark(info.toSuperior)}` +
-      (info.polite ? `<div class="nds-cx">目上には: ${esc(info.polite)}</div>` : '');
+    return `友人${mark(info.toFriend)} 同僚${mark(info.toColleague)} 目上${mark(info.toSuperior)}`;
   }
-  const audienceText = info => (info && info.toSuperior
-    ? `友人${info.toFriend} 同僚${info.toColleague} 目上${info.toSuperior}${info.polite ? `（目上には: ${info.polite}）` : ''}` : '');
+  const audienceText = info => (info && info.toSuperior ? `友人${info.toFriend} 同僚${info.toColleague} 目上${info.toSuperior}` : '');
 
   // ---------- saved words ----------
   function renderSaved() {

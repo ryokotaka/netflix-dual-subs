@@ -36,7 +36,7 @@ $('ctest').onclick = async () => {
   try {
     const j = JSON.parse(r.text);
     sample = `\n例「blend」→ ${j.meaning}／${j.usage}\n使える相手：友人${j.toFriend} 同僚${j.toColleague} 目上${j.toSuperior}` +
-      `${j.polite ? `（目上には: ${j.polite}）` : ''}\n例文 <${j.exampleTo}> ${j.example}`;
+      `\n例文 <${j.exampleTo}> ${j.example}`;
   } catch (_) { /* ignore */ }
   cstatus(`OK：使えます（claude-haiku-5-5、${sec}秒）${sample}`, true);
 };
@@ -56,29 +56,35 @@ $('save').onclick = async () => { status((await save()) ? '保存しました' :
 $('clear').onclick = async () => { $('key').value = ''; await save(); status('削除しました（Chrome内蔵AIを使います）', true); };
 
 // A real-sized lookup (same instruction as content.js LM_SYSTEM) so the timing is realistic.
-const FIELDS = ['meaning', 'usage', 'pattern', 'example', 'exampleJa', 'toFriend', 'toColleague', 'toSuperior', 'polite', 'exampleTo'];
+// A real-sized lookup: same instruction and fields as content.js LM_SYSTEM / LM_SCHEMA,
+// so the timing and the answer look like the real thing.
+const AUDIENCE = ['◎', '○', '△', '×'];
+const FIELDS = { // in the order the model writes them
+  meaning: null, usage: null, toFriend: AUDIENCE, toColleague: AUDIENCE, toSuperior: AUDIENCE,
+  pattern: null, exampleTo: ['友人に', '同僚に', '上司に', '誰でも'], example: null, exampleJa: null,
+};
 const SAMPLE = {
   system: 'あなたは日本人の英語学習者を助ける先生です。英語の字幕の1文（前後の文つき）と、その中の単語または熟語が与えられます。' +
-    'その語を学ぶのに役立つ情報を、この場面での使われ方を中心に答えてください。' +
+    'その語を学ぶのに役立つ情報を答えてください。' +
     'meaning: この文での意味（日本語、20文字以内）。usage: この場面での使われ方・ニュアンス・話し手の気持ち（日本語、60文字以内）。' +
+    'toFriend / toColleague / toSuperior: この場面に関係なく、この意味でのこの言い方を学習者自身が友人／同僚／上司など目上に言ってよいか' +
+    '（◎自然 ○使える △避けた方が無難 ×失礼・不適切）。' +
     'pattern: よく使う形やコロケーション（英語、～で可変部分）。' +
-    'example: patternを使った短く自然な英語の例文。exampleJa: その日本語訳。' +
-    'toFriend / toColleague / toSuperior: 学習者がこの意味・言い方を友人／同僚／上司など目上に使ってよいか' +
-    '（◎自然 ○使える △避けた方が無難 ×失礼・不適切）。polite: toSuperior が△か×のときだけ目上に使える英語の言い換え（短く）、それ以外は空文字。' +
-    'exampleTo: example を誰に向けた言い方として作ったか。',
+    'exampleTo: 例文を言う相手。toFriend / toColleague / toSuperior で◎か○の相手から選ぶ（どの相手にも自然なら 誰でも）。' +
+    'example: patternを使い、exampleTo の相手に言う短く自然な英語の例文。exampleJa: その日本語訳。',
   prompt: "前の文: I'm too white for the black kids and not white enough for the white kids.\n文: Girl, you gotta blend!\n" +
     '次の文: OK, my dude, you are putting so many toxic chemicals on your face.\n対象: blend',
-  schema: {
+  schema: { // Gemini's dialect
     type: 'OBJECT',
-    properties: Object.fromEntries(FIELDS.map(k => [k, { type: 'STRING' }])),
-    required: FIELDS,
+    properties: Object.fromEntries(Object.entries(FIELDS).map(([k, e]) => [k, e ? { type: 'STRING', enum: e } : { type: 'STRING' }])),
+    required: Object.keys(FIELDS),
+    propertyOrdering: Object.keys(FIELDS),
   },
 };
-
-const CLAUDE_SCHEMA = { // JSON Schema form of SAMPLE.schema (same as content.js LM_SCHEMA)
+const CLAUDE_SCHEMA = { // JSON Schema
   type: 'object',
-  properties: Object.fromEntries(SAMPLE.schema.required.map(k => [k, { type: 'string' }])),
-  required: SAMPLE.schema.required,
+  properties: Object.fromEntries(Object.entries(FIELDS).map(([k, e]) => [k, e ? { type: 'string', enum: e } : { type: 'string' }])),
+  required: Object.keys(FIELDS),
   additionalProperties: false,
 };
 
