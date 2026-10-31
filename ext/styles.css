@@ -154,3 +154,11 @@ html.nds-active .watch-video--evidence-overlay-container { display: none !import
 .nds-aud { display: inline-block; margin: 0 6px 0 1px; font-weight: 700; color: #7bd88f; }
 .nds-aud.ng { color: #ffb36b; }
 .nds-to { color: var(--nds-accent); font-size: 12px; }
+/* quiz: pool picker, listening (subtitle hidden), the scene in the answer */
+#nds-root.nds-listening #nds-sub { visibility: hidden; }
+.nds-qtop { padding: 8px 12px 0; color: var(--nds-dim); font-size: 12px; }
+.nds-qtop select { background: #222229; color: var(--nds-text); border: 1px solid var(--nds-line); border-radius: 6px; margin-left: 4px; }
+.nds-qscene { margin: 8px 0; }
+.nds-qs { padding: 4px 0; color: var(--nds-dim); }
+.nds-qs.main { color: var(--nds-text); }
+.nds-qs.main b { color: var(--nds-hl); }

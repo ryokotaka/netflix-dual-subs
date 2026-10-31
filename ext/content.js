@@ -11,6 +11,7 @@
     jaSource: 'none',  // 'netflix' | 'machine' | 'none'
     hasOfficialJa: false,
     repeat: -1, repeatAt: 0, hold: null, // R loop / line held after a jump
+    hist: [], playUntil: 0, // looked-up words / end of a listening-quiz clip
     googleFailedAt: 0,
     source: 'none',    // 'track' | 'dom'
     idx: -1,
@@ -21,7 +22,7 @@
     translating: false,
     status: '',
     saved: [],
-    settings: { shrinkVideo: false, subSize: '1', subPos: '9', hideSdh: true, showJa: true, jaBlur: true, jaBottom: false, jaOfficial: false, hideNetflix: true, autoPause: false, hoverPause: true, panel: true },
+    settings: { quizPool: 'saved', shrinkVideo: false, subSize: '1', subPos: '9', hideSdh: true, showJa: true, jaBlur: true, jaBottom: false, jaOfficial: false, hideNetflix: true, autoPause: false, hoverPause: true, panel: true },
   };
 
   // ---------- storage ----------
@@ -137,6 +138,7 @@
     savedBox.hidden = b.dataset.tab !== 'saved';
     quizBox.hidden = b.dataset.tab !== 'quiz';
     histBox.hidden = b.dataset.tab !== 'hist';
+    if (quizBox.hidden) { S.playUntil = 0; root.classList.remove('nds-listening'); } // left a listening question
     if (!savedBox.hidden) renderSaved();
     if (!quizBox.hidden) nextQuiz();
     if (!histBox.hidden) renderHistory();
@@ -219,6 +221,7 @@
     if (!S.cues.length) return;
     const v = video(); if (!v) return;
     const t = nowMs();
+    if (S.playUntil && t >= S.playUntil) { v.pause(); S.playUntil = 0; } // end of a listening-quiz clip
     // R: loop one line (going far from it, e.g. with Netflix's own seek bar, ends the loop)
     if (S.repeat >= 0 && !v.paused) {
       const c = S.cues[S.repeat];
@@ -541,7 +544,7 @@
     else {
       const ent = [hoverCtx.phrase, hoverCtx.word].find(x => x && x.head === head);
       S.saved.unshift({ head, mean: ent ? ent.mean : '', ctx: hoverCtx.ctxMean || '', info: hoverCtx.ctxInfo || null, context: hoverCtx.cue.en.replace(/\n/g, ' '),
-        ja: (hoverCtx.cue.ja || '').replace(/\n/g, ' '), movieId: S.movieId, title: S.title || '', time: hoverCtx.cue.start, at: Date.now() });
+        ja: (hoverCtx.cue.ja || '').replace(/\n/g, ' '), ...around(hoverCtx.cue), movieId: S.movieId, title: S.title || '', time: hoverCtx.cue.start, at: Date.now() });
       b.textContent = '★'; b.classList.add('on');
     }
     saveSaved();
@@ -805,11 +808,19 @@
   function recordHistory(ctx, info) {
     if (!alive() || !info) return;
     const e = { head: (ctx.phrase || ctx.word || {}).head || ctx.target, ctx: info.meaning, info,
-      context: ctx.cue.en.replace(/\n/g, ' '), ja: (ctx.cue.ja || '').replace(/\n/g, ' '),
+      context: ctx.cue.en.replace(/\n/g, ' '), ja: (ctx.cue.ja || '').replace(/\n/g, ' '), ...around(ctx.cue),
       movieId: S.movieId, title: S.title || '', time: ctx.cue.start, at: Date.now() };
     chrome.storage.local.get('nds_history', ({ nds_history: h = [] }) => {
-      chrome.storage.local.set({ nds_history: [e, ...h.filter(x => sceneKey(x) !== sceneKey(e))].slice(0, 20000) });
+      S.hist = [e, ...h.filter(x => sceneKey(x) !== sceneKey(e))].slice(0, 20000);
+      chrome.storage.local.set({ nds_history: S.hist });
+      updateDueBadge();
     });
+  }
+  // the lines before and after, kept with saved / looked-up words for the listening quiz
+  function around(cue) {
+    const k = S.cues.indexOf(cue), p = S.cues[k - 1], n = S.cues[k + 1];
+    const line = (c, f) => (c ? (c[f] || '').replace(/\n/g, ' ') : '');
+    return { prevEn: line(p, 'en'), prevJa: line(p, 'ja'), nextEn: line(n, 'en'), nextJa: line(n, 'ja') };
   }
   let history = [];
   function renderHistory() {
@@ -833,86 +844,145 @@
     const x = history[+st.dataset.k];
     const w = S.dict && N.lookupWord(S.dict, x.head.split(' ')[0]);
     S.saved.unshift({ head: x.head, mean: (x.head.includes(' ') ? '' : w && w.mean) || x.ctx || '', ctx: x.ctx, info: x.info,
-      context: x.context, ja: x.ja, movieId: x.movieId, title: x.title, time: x.time, at: Date.now() });
+      context: x.context, ja: x.ja, prevEn: x.prevEn, prevJa: x.prevJa, nextEn: x.nextEn, nextJa: x.nextJa,
+      movieId: x.movieId, title: x.title, time: x.time, at: Date.now() });
     saveSaved();
     st.textContent = '★'; st.classList.add('on');
   });
 
-  // ---------- review quiz (from saved words; no AI calls) ----------
+  // ---------- review quiz (saved words, optionally everything looked up; no AI calls) ----------
   // Spaced repetition: a right answer moves the word up a box and pushes its next
   // review out (now / 1 / 3 / 7 / 21 days); a wrong one sends it back to box 0.
+  // Saved words keep box/due on themselves; looked-up-only words in nds_quiz_srs.
+  // Question kinds: meaning / fill-in-the-blank (4 choices), Japanese → English and
+  // listening (say or recall it yourself, then grade yourself - recall beats recognition).
   const QUIZ_DAYS = [0, 1, 3, 7, 21];
   const wordRe = (head, flags) => new RegExp(`\\b(${head.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})\\b`, flags);
-  const meaningOf = s => s.ctx || (s.info && s.info.meaning) || s.mean.split(' / ')[0];
-  const dueWords = () => S.saved.filter(s => (s.due || 0) <= Date.now());
+  const meaningOf = s => s.ctx || (s.info && s.info.meaning) || (s.mean || '').split(' / ')[0];
   const shuffle = a => a.map(x => [Math.random(), x]).sort((p, q) => p[0] - q[0]).map(x => x[1]);
+  const plain = t => (t || '').replace(/^-\s*/, '').replace(/ -/g, ' / '); // dialogue dashes read badly here
+  let srs = {}; // sceneKey -> { box, due } for words that are only in the history
+  const srsOf = x => (x.fromHist ? srs[sceneKey(x)] || {} : x);
+  function quizPool() {
+    const saved = S.saved.map(x => x);
+    if (S.settings.quizPool !== 'all') return saved;
+    const have = new Set(saved.map(sceneKey));
+    return saved.concat((S.hist || []).filter(x => !have.has(sceneKey(x))).map(x => ({ ...x, fromHist: true })));
+  }
+  const isDue = x => (srsOf(x).due || 0) <= Date.now();
   function updateDueBadge() {
-    const n = dueWords().length;
+    const n = quizPool().filter(isDue).length;
     $('.nds-due', panel).textContent = n ? ` ${n}` : '';
   }
+  function grade(x, ok) {
+    const r = srsOf(x);
+    const box = ok ? Math.min((r.box || 0) + 1, QUIZ_DAYS.length - 1) : 0;
+    const due = Date.now() + QUIZ_DAYS[box] * 86400000;
+    if (x.fromHist) { srs[sceneKey(x)] = { box, due }; if (alive()) chrome.storage.local.set({ nds_quiz_srs: srs }); updateDueBadge(); }
+    else { x.box = box; x.due = due; saveSaved(); }
+  }
+  const cueIndexOf = x => (String(x.movieId) === S.movieId ? S.cues.findIndex(c => c.start === x.time) : -1);
+  if (alive()) chrome.storage.local.get(['nds_quiz_srs', 'nds_history'], r => { srs = r.nds_quiz_srs || {}; S.hist = r.nds_history || []; updateDueBadge(); });
 
-  let quiz = null; // { s, kind, choices, answered }
+  let quiz = null; // { s, kind, choices, answered, all }
   function nextQuiz(all) {
-    const pool = all ? S.saved : dueWords();
-    if (!S.saved.length) { quizBox.innerHTML = '<div class="nds-empty">単語を ☆ で保存すると、ここで復習できます</div>'; return; }
+    S.playUntil = 0; root.classList.remove('nds-listening');
+    const everything = quizPool();
+    const head = `<div class="nds-qtop">出題 <select class="nds-qpool"><option value="saved">☆ 保存した単語</option>` +
+      `<option value="all">調べた単語すべて</option></select></div>`;
+    const pool = all ? everything : everything.filter(isDue);
+    if (!everything.length) { quizBox.innerHTML = head + '<div class="nds-empty">単語を ☆ で保存するか、クリックして調べると、ここで復習できます</div>'; return setPoolSelect(); }
     if (!pool.length) {
-      quizBox.innerHTML = '<div class="nds-empty">今日の復習は終わりです 🎉<br><button class="nds-qall">全部から出題する</button></div>';
-      return;
+      quizBox.innerHTML = head + '<div class="nds-empty">今日の復習は終わりです 🎉<br><button class="nds-qall">全部から出題する</button></div>';
+      return setPoolSelect();
     }
-    const s = pool.slice().sort((a, b) => (a.due || 0) - (b.due || 0))[Math.floor(Math.random() * Math.min(3, pool.length))];
-    const others = shuffle(S.saved.filter(x => x !== s));
-    // fill-in-the-blank when the saved word appears as-is in its line, otherwise pick the meaning
-    const blank = s.context && !s.head.includes(' ') && wordRe(s.head, 'i').test(s.context) && others.length >= 3;
-    const kind = blank && Math.random() < 0.5 ? 'blank' : 'meaning';
-    const choices = others.length >= 3
-      ? shuffle([s, ...others.slice(0, 3)])
-      : null; // fewer than 4 saved words: flash card
+    const s = pool.slice().sort((a, b) => (srsOf(a).due || 0) - (srsOf(b).due || 0))[Math.floor(Math.random() * Math.min(3, pool.length))];
+    const others = shuffle(everything.filter(x => x !== s && x.head !== s.head));
+    // which kinds fit this word: listening needs its scene in this episode, Japanese → English its line's translation
+    const kinds = [];
+    if (cueIndexOf(s) >= 0) kinds.push('listen', 'listen');
+    if (s.ja) kinds.push('ja2en', 'ja2en');
+    if (others.length >= 3) kinds.push('meaning');
+    if (others.length >= 3 && s.context && !s.head.includes(' ') && wordRe(s.head, 'i').test(s.context)) kinds.push('blank');
+    const kind = kinds.length ? kinds[Math.floor(Math.random() * kinds.length)] : 'card';
+    const choices = kind === 'meaning' || kind === 'blank' ? shuffle([s, ...others.slice(0, 3)]) : null;
     quiz = { s, kind, choices, answered: false, all };
-    const line = esc((s.context || '').replace(/^-\s*/, '').replace(/ -/g, ' / ')); // dialogue dashes read badly here
-    const q = kind === 'blank'
-      ? `<div class="nds-qq">空欄に入る語は？</div><div class="nds-ql">${line.replace(wordRe(s.head, 'i'), '<b>＿＿＿</b>')}</div>`
-      : `<div class="nds-qq">この文での <b>${esc(s.head)}</b> の意味は？</div><div class="nds-ql">${line.replace(wordRe(s.head, 'i'), '<b>$1</b>')}</div>`;
-    quizBox.innerHTML = `<div class="nds-qcard">${q}` +
+    const line = esc(plain(s.context));
+    const q = {
+      blank: `<div class="nds-qq">空欄に入る語は？</div><div class="nds-ql">${line.replace(wordRe(s.head, 'i'), '<b>＿＿＿</b>')}</div>`,
+      meaning: `<div class="nds-qq">この文での <b>${esc(s.head)}</b> の意味は？</div><div class="nds-ql">${line.replace(wordRe(s.head, 'i'), '<b>$1</b>')}</div>`,
+      ja2en: `<div class="nds-qq">英語で言ってみよう（頭の中か声に出して）</div><div class="nds-ql">${esc(s.ja)}</div>` +
+        `<div class="nds-cx">ヒント：「${esc(meaningOf(s))}」にあたる語句を使う</div>`,
+      listen: `<div class="nds-qq">🎧 聞き取り：前後の文も流します。何と言ったか思い出してから答えを見よう（字幕は隠れます）</div>` +
+        '<div class="nds-qbtns"><button class="nds-qplay">▶ 再生</button></div>',
+      card: `<div class="nds-qq"><b>${esc(s.head)}</b> の意味は？</div><div class="nds-ql">${line}</div>`,
+    }[kind];
+    quizBox.innerHTML = head + `<div class="nds-qcard">${q}` +
       (choices
         ? `<div class="nds-qch">${choices.map((c, i) => `<button class="nds-qc" data-i="${i}">${esc(kind === 'blank' ? c.head : meaningOf(c))}</button>`).join('')}</div>`
         : '<button class="nds-qshow">答えを見る</button>') +
       '<div class="nds-qa" hidden></div></div>';
+    setPoolSelect();
+    if (kind === 'listen') playScene(s);
   }
+  function setPoolSelect() { const sel = $('.nds-qpool', quizBox); if (sel) sel.value = S.settings.quizPool === 'all' ? 'all' : 'saved'; }
+
+  // listening: the line before, the word's line and the line after, subtitles hidden
+  function playScene(x) {
+    const k = cueIndexOf(x); if (k < 0) return;
+    const from = Math.max(0, k - 1), to = Math.min(S.cues.length - 1, k + 1);
+    root.classList.add('nds-listening');
+    seekToCue(from);
+    S.playUntil = S.cues[to].end + 300;
+    const v = video(); if (v && v.paused) v.play();
+  }
+
   function answerQuiz(correct) {
-    const { s } = quiz;
+    const { s, kind } = quiz;
     quiz.answered = true;
-    if (correct !== null) {
-      s.box = correct ? Math.min((s.box || 0) + 1, QUIZ_DAYS.length - 1) : 0;
-      s.due = Date.now() + QUIZ_DAYS[s.box] * 86400000;
-      saveSaved(); updateDueBadge();
-    }
+    S.playUntil = 0; root.classList.remove('nds-listening');
+    if (correct !== null) grade(s, correct);
     const info = s.info;
+    const hl = t => esc(plain(t)).replace(wordRe(s.head, 'i'), '<b>$1</b>');
+    if (!s.prevEn && !s.nextEn) { // saved before the surrounding lines were kept: take them from this episode
+      const k = cueIndexOf(s), line = (c, f) => (c ? (c[f] || '').replace(/\n/g, ' ') : '');
+      if (k >= 0) Object.assign(s, { prevEn: line(S.cues[k - 1], 'en'), prevJa: line(S.cues[k - 1], 'ja'), nextEn: line(S.cues[k + 1], 'en'), nextJa: line(S.cues[k + 1], 'ja') });
+    }
+    const scene = kind === 'listen' || kind === 'ja2en'
+      ? `<div class="nds-qscene">${s.prevEn && kind === 'listen' ? `<div class="nds-qs">${esc(plain(s.prevEn))}<div class="nds-cx">${esc(s.prevJa || '')}</div></div>` : ''}` +
+        `<div class="nds-qs main">${hl(s.context)}<div class="nds-cx">${esc(s.ja || '')}</div></div>` +
+        `${s.nextEn && kind === 'listen' ? `<div class="nds-qs">${esc(plain(s.nextEn))}<div class="nds-cx">${esc(s.nextJa || '')}</div></div>` : ''}</div>`
+      : '';
     const a = $('.nds-qa', quizBox);
     a.hidden = false;
-    a.innerHTML = (correct === null ? '' : `<div class="${correct ? 'nds-ok' : 'nds-ng'}">${correct ? '正解！' : '残念…'}</div>`) +
+    a.innerHTML = (correct === null ? '' : `<div class="${correct ? 'nds-ok' : 'nds-ng'}">${correct ? '正解！' : '残念…'}</div>`) + scene +
       `<div><b>${esc(s.head)}</b>：${esc(meaningOf(s))}</div>` +
       (info ? `<div class="nds-ci"><span class="nds-cl">使われ方</span>${esc(info.usage)}</div>` +
         (info.toSuperior ? `<div class="nds-ci"><span class="nds-cl">使える相手</span>${audienceHtml(info)}</div>` : '') +
-        `<div class="nds-ci"><span class="nds-cl">例</span>${esc(info.example)}<div class="nds-cx">${esc(info.exampleJa)}</div></div>` : '') +
-      (s.ja ? `<div class="nds-ci"><span class="nds-cl">訳</span>${esc(s.ja)}</div>` : '') +
-      `<div class="nds-qbtns">${s.time != null ? '<button class="nds-qgo">▶ この場面を見る</button>' : ''}` +
-      (correct === null ? '<button class="nds-qself" data-ok="1">覚えてた</button><button class="nds-qself" data-ok="0">忘れてた</button>' : '') +
+        `<div class="nds-ci"><span class="nds-cl">例</span>${info.exampleTo ? `<span class="nds-to">&lt;${esc(info.exampleTo)}&gt;</span> ` : ''}${esc(info.example)}<div class="nds-cx">${esc(info.exampleJa)}</div></div>` : '') +
+      (s.ja && !scene ? `<div class="nds-ci"><span class="nds-cl">訳</span>${esc(s.ja)}</div>` : '') +
+      `<div class="nds-qbtns">${kind === 'listen' ? '<button class="nds-qplay">▶ もう一度聞く</button>' : s.time != null ? '<button class="nds-qgo">▶ この場面を見る</button>' : ''}` +
+      (correct === null ? `<button class="nds-qself" data-ok="1">${kind === 'card' ? '覚えてた' : kind === 'listen' ? '聞き取れた' : '言えた'}</button>` +
+        `<button class="nds-qself" data-ok="0">${kind === 'card' ? '忘れてた' : kind === 'listen' ? '聞き取れなかった' : '言えなかった'}</button>` : '') +
       '<button class="nds-qnext">次へ</button></div>';
   }
+  quizBox.addEventListener('change', e => {
+    if (!e.target.closest('.nds-qpool')) return;
+    S.settings.quizPool = e.target.value; saveSettings(); updateDueBadge(); nextQuiz(false);
+  });
   quizBox.addEventListener('click', e => {
     const t = e.target;
+    if (t.closest('.nds-qpool')) return;
     if (t.closest('.nds-qall')) return nextQuiz(true);
     if (!quiz) return;
     if (t.closest('.nds-qnext')) return nextQuiz(quiz.all);
+    if (t.closest('.nds-qplay')) { // replay keeps the answer visible if it's shown
+      const shown = quiz.answered; playScene(quiz.s); if (shown) root.classList.remove('nds-listening'); return;
+    }
     if (t.closest('.nds-qgo')) return goToSaved(quiz.s);
     if (t.closest('.nds-qshow')) return answerQuiz(null);
     const self = t.closest('.nds-qself');
-    if (self) { // flash card: grade yourself
-      quiz.s.box = self.dataset.ok === '1' ? Math.min((quiz.s.box || 0) + 1, QUIZ_DAYS.length - 1) : 0;
-      quiz.s.due = Date.now() + QUIZ_DAYS[quiz.s.box] * 86400000;
-      saveSaved(); updateDueBadge();
-      return nextQuiz(quiz.all);
-    }
+    if (self) { grade(quiz.s, self.dataset.ok === '1'); return nextQuiz(quiz.all); } // grade yourself
     const c = t.closest('.nds-qc');
     if (c && !quiz.answered) {
       const ok = quiz.choices[+c.dataset.i] === quiz.s;
