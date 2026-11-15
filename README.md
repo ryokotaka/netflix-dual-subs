@@ -1,7 +1,8 @@
 # Netflix Dual Subs
 
-**For Japanese speakers learning English: watch Netflix with English and Japanese subtitles,
-click any word to see what it means in that line, and review the words you looked up.**
+**A free, open-source alternative to Language Reactor Pro ($40/yr)** for Japanese speakers
+learning English: watch Netflix with English and Japanese subtitles, click any word to see what it
+means in that line, and review the words you looked up.
 
 Netflixで英語を学ぶ日本語話者のための Chrome 拡張。英日の二重字幕で観ながら、単語をクリックするとその場面での意味が分かり、調べた単語はあとで復習できます。
 
