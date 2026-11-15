@@ -7,41 +7,33 @@ Netflixで英語を学ぶ日本語話者のための Chrome 拡張。英日の�
 
 ![Clicking "pull" in the subtitle shows the idiom "pull off", what it means in this line, who you could say it to, and an example. English and Japanese subtitles at the bottom, the transcript on the right.](docs/screenshot-lookup.png)
 
+## What it does
+
+- **English + Japanese subtitles**, and the whole episode as a clickable transcript
+- **Click a word** → its meaning *in this line*, who you can say it to (friend / colleague / boss), and an example. Idioms like *figure it out* are recognized
+- **Review** the words you looked up: four kinds of questions, spaced 1 to 21 days apart
+- Keyboard: <kbd>,</kbd> previous line · <kbd>.</kbd> again · <kbd>/</kbd> next line · <kbd>R</kbd> repeat
+
+Works without any API key (free translation and Chrome's built-in AI). A Claude API key makes the
+word explanations faster and better, at about $0.0002 a lookup.
+
 ![Review tab: a multiple-choice question on a saved phrase, answered.](docs/screenshot-review.png)
 
-A Chrome extension (Manifest V3) in the spirit of Language Reactor: dual subtitles, a clickable
-transcript, an idiom-aware hover dictionary, AI explanations of a word *in its context*, and
-spaced-repetition review built from the words you looked up.
+## Try it
 
-<sub>Screenshots use a stand-in player page and made-up dialogue (`tools/screenshots.mjs`); nothing from Netflix is shown.</sub>
+1. Download **[netflix-dual-subs.zip](https://github.com/ryokotaka/netflix-dual-subs/releases/latest/download/netflix-dual-subs.zip)** and unzip it
+2. Open `chrome://extensions`, turn on **Developer mode** (top right)
+3. **Load unpacked** → choose the unzipped folder
+4. Play anything on Netflix
 
-> Personal, non-commercial project. Not affiliated with or endorsed by Netflix. It is not
-> published on the Chrome Web Store, does not download or record video, and does not touch
-> DRM; it only reads the subtitle tracks the player already loads. Netflix may change its
-> player at any time and break it.
+<sub>Personal, non-commercial project, not affiliated with Netflix. It reads only the subtitle
+tracks the player already loads; it does not download video or touch DRM. Screenshots use a
+stand-in player and made-up dialogue.</sub>
 
-## Features
+---
 
-- **Dual subtitles**: English on the video, Japanese in the side panel (blurred until you hover,
-  or press <kbd>J</kbd>). Japanese is machine-translated by default, because official
-  Japanese subtitles are often loose or shortened; the official ones are one switch away.
-- **Transcript panel**: every line of the episode; click a line to jump there. The current line
-  stays centered. Hovering the panel pauses the video.
-- **Hover dictionary with idioms**: looks up the longest phrase (2–6 words) around the word
-  under the cursor, so *figuring **it** out* finds *figure out* and *gave up* finds *give up*.
-- **AI explanation on click**: what the word means in *this* line, how it's used, a common
-  pattern, an example sentence, and whether you could say it to a friend / a colleague /
-  your boss (◎○△×). Claude Haiku if you set a key, otherwise Gemini, otherwise Chrome's
-  on-device Gemini Nano.
-- **Learning loop**: save words (☆), jump back to the scene from the saved list or the lookup
-  history, export to Anki CSV, and review with four question types (meaning, fill-in-the-blank,
-  Japanese→English, listening) on a 0/1/3/7/21-day schedule.
-- **Keyboard**: <kbd>,</kbd> previous line, <kbd>.</kbd> again, <kbd>/</kbd> next line,
-  <kbd>R</kbd> repeat line, <kbd>Q</kbd> pause after each line, <kbd>P</kbd> panel.
-  Keys are matched by physical position, so they work with a Japanese IME on.
-- Sound effects, speaker names and lyrics (`[sighs]`, `NORAH:`, `♪…♪`) are stripped.
-
-## How it works
+<details>
+<summary><b>How it works</b> (architecture and design notes)</summary>
 
 ```
 Netflix page ─────────────────────────────────────────────────────────────────────
@@ -58,8 +50,6 @@ keystore.js                   API keys in the extension's own IndexedDB
 options.html / options.js     settings page: keys, usage log, backup / restore
 ```
 
-Some decisions worth noting:
-
 - **Reading tracks, not hooking requests.** An earlier version patched `JSON.parse` /
   `JSON.stringify` to catch the manifest; the player stopped passing through them and the
   hook was a suspect in first-load hangs. The extension now finds the player segment whose
@@ -68,6 +58,8 @@ Some decisions worth noting:
 - **Seeking.** Setting `video.currentTime` makes Netflix error out, so seeks go through the
   player API. That API lands slightly early, so the target line is held as "current" for up
   to 1.5 s to stop the transcript from jumping back a line.
+- **Idioms.** Every 2–6 word window around the cursor is tried, longest match wins; the first
+  word is lemmatized and object pronouns dropped, so *figuring **it** out* finds *figure out*.
 - **API keys never enter the Netflix tab.** Keys live in IndexedDB that only the service
   worker and the settings page open. The content script sees only a flag saying which AI to
   use. Keys go in request headers only and are never logged or backed up.
@@ -82,43 +74,46 @@ Some decisions worth noting:
   `Downloads/NetflixDualSubs/backup.json` once a day (plus a monthly copy), and merged back
   on restore. After a reinstall, the automatic backup writes to a separate file until you
   restore, so an empty profile can't overwrite the last good backup.
+- **Pinned extension ID.** The `key` in `manifest.json` fixes the ID, so saved data stays with
+  the extension even if its folder moves.
 
-## Install
+</details>
 
-1. Clone the repository.
-2. `chrome://extensions` → turn on Developer mode → **Load unpacked** → choose `ext/`.
-   (If the repository is on an external drive, run `tools/install.sh` and load the copy it
-   makes on the internal disk instead: Chrome drops unpacked extensions whose folder is
-   missing at startup.)
-3. Optional: open the extension's options and add a Claude or Gemini API key.
-4. Turn off Language Reactor if you have it (the subtitles would overlap).
+<details>
+<summary><b>All features</b></summary>
 
-The extension ID is pinned with the `key` in `manifest.json`, so the saved data stays with
-the extension even if the folder moves.
+- Japanese is machine-translated by default (official Japanese subtitles are often loose or
+  shortened); official subtitles are one switch away. In the panel it can be blurred until you
+  hover, or shown under the English too.
+- Hovering a word shows the dictionary; hovering the subtitle or the panel pauses the video.
+- Save words (☆): underlined in the subtitles, listed with ▶ to jump back to the scene,
+  exportable to Anki CSV. A history tab keeps every word you clicked.
+- Review questions: meaning (4 choices), fill in the blank, Japanese → English, and listening
+  (plays the scene with subtitles hidden).
+- Keys: <kbd>J</kbd> show Japanese · <kbd>Q</kbd> pause after each line · <kbd>P</kbd> panel.
+  Matched by physical key, so they work with a Japanese IME on.
+- Sound effects, speaker names and lyrics (`[sighs]`, `NORAH:`, `♪…♪`) are hidden.
+- AI: Claude Haiku with a Claude API key, else Gemini with a Gemini key, else Chrome's
+  on-device Gemini Nano. Keys go in the extension's options page.
 
-## Development
+</details>
+
+<details>
+<summary><b>Development</b></summary>
 
 ```bash
 node tests/test.js          # phrase lookup, lemmas, parsers, SDH stripping
 node tools/screenshots.mjs  # UI check: runs the real UI on a stand-in player page in
                             # headless Chrome and writes docs/screenshot-*.png
 python3 tools/build_dict.py # rebuild ext/dict.json (pip install wn)
+tools/install.sh            # copy ext/ to the internal disk (for a repo on an external drive:
+                            # Chrome drops unpacked extensions whose folder is missing at startup)
 ```
 
 Debug logs in DevTools are prefixed with `[NDS]`.
 
-## Notes
+</details>
 
-- Translation uses Google Translate's free, unofficial `translate_a/single` endpoint, falling
-  back to Chrome's built-in `Translator` API. It may stop working at any time.
-- Dictionary data: EJDict (CC0) and Open Multilingual Wordnet (English and Japanese
-  WordNet). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-- Code: [MIT](LICENSE).
-
----
-
-## 日本語
-
-Language Reactor 風の自分用 Chrome 拡張。Netflix で英語＋日本語の二重字幕、字幕一覧、熟語対応のホバー辞書、
-クリックした単語の文脈での意味（AI）、保存単語・履歴からの復習ができます。
-インストールは上の Install の手順を参照。
+Translation uses Google Translate's free, unofficial endpoint, falling back to Chrome's built-in
+`Translator` API. Dictionary data: EJDict (CC0) and Open Multilingual Wordnet; see
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Code: [MIT](LICENSE).
