@@ -1,6 +1,6 @@
 # Netflix Dual Subs
 
-**A free, open-source alternative to Language Reactor Pro ($40/yr)** for Japanese speakers
+**A free, open-source take on the ~$40/yr language-learning extensions**, for Japanese speakers
 learning English: watch Netflix with English and Japanese subtitles, click any word to see what it
 means in that line, and review the words you looked up.
 
