@@ -1,4 +1,3 @@
-tests/shot*.png
 tools/data/
 __pycache__/
 .DS_Store

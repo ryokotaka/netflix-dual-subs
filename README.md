@@ -5,6 +5,12 @@ Language Reactor: English and Japanese subtitles together, a clickable transcrip
 idiom-aware hover dictionary, AI explanations of a word *in its context*, and spaced-repetition
 review built from the words you looked up.
 
+![Clicking "pull" in the subtitle: the idiom "pull off", its meaning in this line, who you could say it to, and an example. The transcript panel is on the right, Japanese blurred until hovered.](docs/screenshot-lookup.png)
+
+<p align="center"><img src="docs/screenshot-review.png" width="49%" alt="Review tab: say the saved phrase in English from the Japanese line"></p>
+
+<sub>Screenshots use a stand-in player page and made-up dialogue (`tools/screenshots.mjs`); nothing from Netflix is shown.</sub>
+
 > Personal, non-commercial project. Not affiliated with or endorsed by Netflix. It is not
 > published on the Chrome Web Store, does not download or record video, and does not touch
 > DRM; it only reads the subtitle tracks the player already loads. Netflix may change its
@@ -90,7 +96,8 @@ the extension even if the folder moves.
 
 ```bash
 node tests/test.js          # phrase lookup, lemmas, parsers, SDH stripping
-python3 tests/smoke.py      # Playwright: loads the extension into a fake Netflix page
+node tools/screenshots.mjs  # UI check: runs the real UI on a stand-in player page in
+                            # headless Chrome and writes docs/screenshot-*.png
 python3 tools/build_dict.py # rebuild ext/dict.json (pip install wn)
 ```
 
