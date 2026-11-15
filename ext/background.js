@@ -116,7 +116,12 @@ function recordUsage(u, target) {
 }
 
 // the model choice rules may have changed with this version: pick again
-chrome.runtime.onInstalled.addListener(() => chrome.storage.local.remove(['nds_gemini_model', 'nds_gemini_thinking']));
+chrome.runtime.onInstalled.addListener(({ reason }) => {
+  chrome.storage.local.remove(['nds_gemini_model', 'nds_gemini_thinking']);
+  // A fresh install starts with empty storage. Until the old backup is restored, the
+  // automatic backup must not overwrite it (see writeBackup).
+  if (reason === 'install') chrome.storage.local.set({ nds_fresh_install: Date.now() });
+});
 
 // Gemini API (key from Google AI Studio, saved in the settings). On a key whose project
 // has no billing set up, only the free tier is used, so it can never be charged.
@@ -227,17 +232,27 @@ async function backupData() {
 
 // Writes backup.json (overwritten each time) and, the first time each month, a dated
 // copy too, so a bad day can't wipe out the only good backup. Returns the file count.
+// Right after a reinstall the storage is (nearly) empty, and overwriting backup.json and
+// the month's copy with that once lost real data. So until a restore (or an explicit
+// "back up now" from the settings page), the automatic backup goes to its own file.
 async function writeBackup(force) {
   const backup = await backupData();
+  const d = backup.data;
+  if (!force && !(d.nds_saved || []).length && !(d.nds_history || []).length && !Object.keys(d.nds_ctx || {}).length) return 0;
   const json = JSON.stringify(backup);
-  const sig = String(json.length) + ':' + hash(JSON.stringify(backup.data));
-  const { nds_backup: last = {} } = await chrome.storage.local.get('nds_backup');
+  const sig = String(json.length) + ':' + hash(JSON.stringify(d));
+  const { nds_backup: last = {}, nds_fresh_install: fresh } = await chrome.storage.local.get(['nds_backup', 'nds_fresh_install']);
   if (!force && last.sig === sig) return 0; // nothing changed since the last backup
   const month = backup.at.slice(0, 7);
-  const files = ['backup.json'];
-  if (last.month !== month) files.push(`backup-${month}.json`);
+  let files;
+  if (fresh && !force) files = ['backup-after-reinstall.json'];
+  else {
+    files = ['backup.json'];
+    if (last.month !== month) files.push(`backup-${month}.json`);
+  }
   for (const f of files) await download(json, BACKUP_DIR + f);
-  await chrome.storage.local.set({ nds_backup: { sig, month, at: Date.now() } });
+  await chrome.storage.local.set({ nds_backup: { sig, month: fresh && !force ? last.month : month, at: Date.now() } });
+  if (force) await chrome.storage.local.remove('nds_fresh_install');
   return files.length;
 }
 
@@ -284,5 +299,6 @@ async function restoreBackup(backup) {
   };
   if (!cur.nds_usage && b.nds_usage) out.nds_usage = b.nds_usage;
   await chrome.storage.local.set(out);
+  await chrome.storage.local.remove('nds_fresh_install'); // the automatic backup may write backup.json again
   return { saved: out.nds_saved.length, history: out.nds_history.length, ctx: Object.keys(out.nds_ctx).length };
 }

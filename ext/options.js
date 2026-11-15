@@ -131,12 +131,17 @@ $('ureset').onclick = () => chrome.storage.local.remove('nds_usage');
 // ---------- backup / restore (done by background.js) ----------
 const bstatus = show('bstatus');
 function showLastBackup() {
-  chrome.storage.local.get('nds_backup', ({ nds_backup: b }) => {
-    if (!$('bstatus').textContent) bstatus(b ? `前回のバックアップ：${new Date(b.at).toLocaleString('ja-JP')}` : 'まだバックアップはありません');
+  chrome.storage.local.get(['nds_backup', 'nds_fresh_install'], ({ nds_backup: b, nds_fresh_install: fresh }) => {
+    if ($('bstatus').textContent) return;
+    if (fresh) return bstatus('拡張が入れ直されたため、今は前のデータがありません。「バックアップから復元…」で backup.json を選んでください。' +
+      '\n（復元するまでは、自動バックアップは backup.json を上書きせず backup-after-reinstall.json に保存します）', false);
+    bstatus(b ? `前回のバックアップ：${new Date(b.at).toLocaleString('ja-JP')}` : 'まだバックアップはありません');
   });
 }
 showLastBackup();
 $('bnow').onclick = async () => {
+  const { nds_fresh_install: fresh } = await chrome.storage.local.get('nds_fresh_install');
+  if (fresh && !confirm('まだ復元していません。このままバックアップすると、前のデータが入った backup.json を今の少ないデータで上書きします。続けますか？')) return;
   bstatus('バックアップ中…');
   const r = await chrome.runtime.sendMessage({ type: 'backupNow' });
   bstatus(r && r.ok ? `保存しました（ダウンロード › NetflixDualSubs › backup.json${r.n > 1 ? ' と今月分' : ''}）` : 'エラー：' + (r ? r.error : 'no response'), !!(r && r.ok));
