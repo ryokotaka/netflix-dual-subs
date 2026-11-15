@@ -1,8 +1,8 @@
 # Netflix Dual Subs
 
 **A free, open-source take on the ~$40/yr language-learning extensions**, for Japanese speakers
-learning English: watch Netflix with English and Japanese subtitles, click any word to see what it
-means in that line, and review the words you looked up.
+learning English: watch Netflix with English and Japanese subtitles at the same time, click any word
+to see what it means in that line, and review the words you looked up.
 
 Netflixで英語を学ぶ日本語話者のための Chrome 拡張。英日の二重字幕で観ながら、単語をクリックするとその場面での意味が分かり、調べた単語はあとで復習できます。
 
@@ -10,7 +10,8 @@ Netflixで英語を学ぶ日本語話者のための Chrome 拡張。英日の�
 
 ## What it does
 
-- **English + Japanese subtitles**, and the whole episode as a clickable transcript
+- **English and Japanese at once** (Netflix shows only one), translated line by line instead of the loose official subtitles
+- The whole episode as a transcript: click a line to jump there
 - **Click a word** → its meaning *in this line*, who you can say it to (friend / colleague / boss), and an example. Idioms like *figure it out* are recognized
 - **Review** the words you looked up: four kinds of questions, spaced 1 to 21 days apart
 - Keyboard: <kbd>,</kbd> previous line · <kbd>.</kbd> again · <kbd>/</kbd> next line · <kbd>R</kbd> repeat
