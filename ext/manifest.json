@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Netflix Dual Subs (personal)",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "英語＋日本語の二重字幕、字幕一覧、熟語対応のホバー辞書。自分用。",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAoZL4LwiJpT4iEJ21KVliNX0JjOTeukn/1N81kFHg4GKWfqorBhwdgXO4TRMzyfYn7uKi1k7swg7pf4POk3KzlsboYK8IUsT77vUNtiWhrhhAeR59QiKAD8y8grkNhbtFxxoBSf7eu8F/pBmPe88rIBesHsHb5XEKsJKHi6nO8BcP0awecDpABwLqzC93db9aJnxMB05awQUgcm0L8e3Kxjgm5CW169bzOt5yHO1wyAGKcWe7cZZCsi+E6X2qSVknggqIcshQKRZyR9O+HdXKedKE+ZUI5DVtldA1x86MRZB9/l5knC8Bl27W8j7f4EU4oUW7EcqujJzG7FvQ+O8UVQIDAQAB",
   "permissions": [
