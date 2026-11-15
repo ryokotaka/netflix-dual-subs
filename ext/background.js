@@ -116,12 +116,30 @@ function recordUsage(u, target) {
 }
 
 // the model choice rules may have changed with this version: pick again
-chrome.runtime.onInstalled.addListener(({ reason }) => {
+chrome.runtime.onInstalled.addListener(async ({ reason }) => {
   chrome.storage.local.remove(['nds_gemini_model', 'nds_gemini_thinking']);
   // A fresh install starts with empty storage. Until the old backup is restored, the
   // automatic backup must not overwrite it (see writeBackup).
-  if (reason === 'install') chrome.storage.local.set({ nds_fresh_install: Date.now() });
+  if (reason === 'install') await chrome.storage.local.set({ nds_fresh_install: Date.now() });
+  if (await autoRestore()) chrome.runtime.openOptionsPage(); // there: the result, and the API key fields
 });
+
+// tools/install.sh --with-backups puts backup files in restore/ next to the extension.
+// When the extension starts with no learning data, it restores them by itself, so a
+// reinstall needs no clicking through the settings page. Returns true if it restored.
+async function autoRestore() {
+  const cur = await chrome.storage.local.get(['nds_saved', 'nds_history', 'nds_ctx']);
+  if ((cur.nds_saved || []).length || (cur.nds_history || []).length || Object.keys(cur.nds_ctx || {}).length) return false;
+  let names;
+  try { names = await (await fetch(chrome.runtime.getURL('restore/index.json'))).json(); } catch (e) { return false; } // none bundled
+  let r = null;
+  for (const name of names) {
+    try { r = await restoreBackup(await (await fetch(chrome.runtime.getURL('restore/' + name))).json()); } catch (e) { console.warn('[NDS] auto restore', name, e); }
+  }
+  if (!r) return false;
+  await chrome.storage.local.set({ nds_autorestore: { at: Date.now(), files: names, ...r } });
+  return true;
+}
 
 // Gemini API (key from Google AI Studio, saved in the settings). On a key whose project
 // has no billing set up, only the free tier is used, so it can never be charged.

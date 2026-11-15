@@ -131,8 +131,15 @@ $('ureset').onclick = () => chrome.storage.local.remove('nds_usage');
 // ---------- backup / restore (done by background.js) ----------
 const bstatus = show('bstatus');
 function showLastBackup() {
-  chrome.storage.local.get(['nds_backup', 'nds_fresh_install'], ({ nds_backup: b, nds_fresh_install: fresh }) => {
+  chrome.storage.local.get(['nds_backup', 'nds_fresh_install', 'nds_autorestore'], ({ nds_backup: b, nds_fresh_install: fresh, nds_autorestore: a }) => {
     if ($('bstatus').textContent) return;
+    if (a && Date.now() - a.at < 30 * 60e3) { // just reinstalled: background.js restored the bundled backups
+      bstatus(`入れ直しを検知して、バックアップから自動で復元しました：保存した単語 ${a.saved}件・履歴 ${a.history}件・AIの解説 ${a.ctx}件（${a.files.join('、')}）`, true);
+      keystore.get('claude').then(k => {
+        if (!k) { cstatus('APIキーは復元されないので、ここに入れ直して「保存してテスト」を押してください', false); $('ckey').focus(); }
+      });
+      return;
+    }
     if (fresh) return bstatus('拡張が入れ直されたため、今は前のデータがありません。「バックアップから復元…」で backup.json を選んでください。' +
       '\n（復元するまでは、自動バックアップは backup.json を上書きせず backup-after-reinstall.json に保存します）', false);
     bstatus(b ? `前回のバックアップ：${new Date(b.at).toLocaleString('ja-JP')}` : 'まだバックアップはありません');
