@@ -2,12 +2,18 @@
 html.nds-hide-nf .player-timedtext { opacity: 0 !important; }
 
 #nds-root {
-  --nds-bg: rgba(18, 18, 22, 0.92);
-  --nds-line: rgba(255, 255, 255, 0.08);
-  --nds-text: #f2f2f2;
-  --nds-dim: #a8a8b3;
-  --nds-accent: #b57bff;
-  --nds-hl: #ffd166;
+  /* soft sage-green theme: a dark green-grey base (it sits over video), a muted mint accent,
+     and a soft cream for the word under the cursor */
+  --nds-bg: rgba(17, 23, 21, 0.93);
+  --nds-line: rgba(214, 240, 226, 0.09);
+  --nds-text: #ecf2ee;
+  --nds-dim: #9db0a6;
+  --nds-accent: #93d1b6;
+  --nds-accent-ink: #0f1a15;              /* text on an accent fill */
+  --nds-accent-soft: rgba(147, 209, 182, 0.15);
+  --nds-hl: #f1e2a4;
+  --nds-hl-soft: rgba(241, 226, 164, 0.22);
+  --nds-field: #1b2420;
   font-family: -apple-system, "Segoe UI", "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", sans-serif;
   color: var(--nds-text);
 }
@@ -28,7 +34,7 @@ html.nds-hide-nf .player-timedtext { opacity: 0 !important; }
 }
 .nds-en > div { display: block; }
 .nds-w { pointer-events: auto; cursor: help; border-radius: 4px; padding: 0 1px; }
-.nds-w:hover, .nds-w.nds-hl { background: rgba(255, 209, 102, 0.25); color: var(--nds-hl); }
+.nds-w:hover, .nds-w.nds-hl { background: var(--nds-hl-soft); color: var(--nds-hl); }
 .nds-ja {
   font-size: calc(clamp(14px, 1.7vw, 26px) * var(--nds-sub-scale, 1)); color: #e6e6e6; line-height: 1.4; white-space: pre-line;
   text-shadow: 0 0 4px #000, 0 2px 6px #000;
@@ -49,7 +55,7 @@ html.nds-hide-nf .player-timedtext { opacity: 0 !important; }
 .nds-e + .nds-e { border-top: 1px solid var(--nds-line); margin-top: 8px; padding-top: 8px; }
 .nds-eh { display: flex; align-items: center; gap: 8px; }
 .nds-eh b { font-size: 17px; }
-.nds-kind { font-size: 11px; padding: 1px 6px; border-radius: 99px; background: var(--nds-accent); color: #fff; }
+.nds-kind { font-size: 11px; padding: 1px 6px; border-radius: 99px; background: var(--nds-accent); color: var(--nds-accent-ink); font-weight: 600; }
 .nds-star { margin-left: auto; background: none; border: 0; font-size: 18px; color: var(--nds-dim) !important; }
 .nds-star.on { color: var(--nds-hl) !important; }
 .nds-em { color: #ddd; margin-top: 2px; }
@@ -75,7 +81,7 @@ html.nds-hide-nf .player-timedtext { opacity: 0 !important; }
 #nds-root.nds-panel-on #nds-panel { display: flex; }
 #nds-open {
   position: fixed; top: 14px; right: 14px; z-index: 2147483001; width: 36px; height: 36px;
-  border-radius: 50%; border: 0; background: var(--nds-accent); font-weight: 700; opacity: .85;
+  border-radius: 50%; border: 0; background: var(--nds-accent); color: var(--nds-accent-ink) !important; font-weight: 700; opacity: .9;
 }
 #nds-root.nds-panel-on #nds-open { display: none; }
 .nds-head { display: flex; align-items: center; gap: 4px; padding: 8px; border-bottom: 1px solid var(--nds-line); }
@@ -89,12 +95,12 @@ html.nds-hide-nf .player-timedtext { opacity: 0 !important; }
 .nds-keys { font-size: 12px; color: var(--nds-dim); margin-top: 4px; }
 .nds-status { padding: 8px 14px; font-size: 12px; color: var(--nds-hl); border-bottom: 1px solid var(--nds-line); }
 .nds-status[hidden] { display: none; }
-.nds-status button, .nds-csv { color: #fff !important; background: var(--nds-accent); border: 0; border-radius: 6px; padding: 3px 8px; margin-left: 6px; font-size: 12px; }
+.nds-status button, .nds-csv { color: var(--nds-accent-ink) !important; background: var(--nds-accent); border: 0; border-radius: 6px; padding: 3px 8px; margin-left: 6px; font-size: 12px; }
 .nds-list, .nds-saved, .nds-quiz, .nds-hist { flex: 1; overflow-y: auto; }
 .nds-list[hidden], .nds-saved[hidden], .nds-quiz[hidden], .nds-hist[hidden] { display: none; }
 .nds-row { display: flex; gap: 6px; padding: 6px 10px; border-bottom: 1px solid var(--nds-line); cursor: pointer; }
 .nds-row:hover { background: rgba(255,255,255,.05); }
-.nds-row.on { background: rgba(181,123,255,.18); box-shadow: inset 3px 0 0 var(--nds-accent); }
+.nds-row.on { background: var(--nds-accent-soft); box-shadow: inset 3px 0 0 var(--nds-accent); }
 .nds-t { color: var(--nds-dim); font-size: 11px; min-width: 34px; padding-top: 2px; font-variant-numeric: tabular-nums; }
 .nds-rt { flex: 1; min-width: 0; }
 .nds-rja { color: var(--nds-dim); font-size: 12px; margin-top: 2px; }
@@ -113,11 +119,11 @@ html.nds-hide-nf .player-timedtext { opacity: 0 !important; }
 #nds-root.nds-reveal .nds-ja { display: block; }
 /* words you saved before */
 .nds-w.nds-sv { text-decoration: underline 2px var(--nds-accent); text-underline-offset: 4px; }
-#nds-root .nds-settings select { background: #222229; color: var(--nds-text); border: 1px solid var(--nds-line); border-radius: 6px; margin-left: 6px; }
+#nds-root .nds-settings select { background: var(--nds-field); color: var(--nds-text); border: 1px solid var(--nds-line); border-radius: 6px; margin-left: 6px; }
 /* saved list: back to the scene */
 .nds-go { margin-top: 4px; padding: 1px 8px; border-radius: 6px; border: 1px solid var(--nds-line); background: none; font-size: 12px; color: var(--nds-dim) !important; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nds-go:hover { color: var(--nds-text) !important; border-color: var(--nds-accent); }
-.nds-due { margin-left: 2px; padding: 0 5px; border-radius: 99px; background: var(--nds-accent); color: #fff; font-size: 11px; }
+.nds-due { margin-left: 2px; padding: 0 5px; border-radius: 99px; background: var(--nds-accent); color: var(--nds-accent-ink); font-size: 11px; font-weight: 600; }
 .nds-due:empty { display: none; }
 /* review quiz */
 .nds-qcard { padding: 14px 12px; }
@@ -157,7 +163,7 @@ html.nds-active .watch-video--evidence-overlay-container { display: none !import
 /* quiz: pool picker, listening (subtitle hidden), the scene in the answer */
 #nds-root.nds-listening #nds-sub { visibility: hidden; }
 .nds-qtop { padding: 8px 12px 0; color: var(--nds-dim); font-size: 12px; }
-.nds-qtop select { background: #222229; color: var(--nds-text); border: 1px solid var(--nds-line); border-radius: 6px; margin-left: 4px; }
+.nds-qtop select { background: var(--nds-field); color: var(--nds-text); border: 1px solid var(--nds-line); border-radius: 6px; margin-left: 4px; }
 .nds-qscene { margin: 8px 0; }
 .nds-qs { padding: 4px 0; color: var(--nds-dim); }
 .nds-qs.main { color: var(--nds-text); }

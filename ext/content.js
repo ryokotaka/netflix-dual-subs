@@ -168,7 +168,7 @@
     const r = list.querySelector(`.nds-row[data-k="${k}"] .nds-rja`);
     if (r) r.textContent = (S.cues[k].ja || '').replace(/\n/g, ' ');
   }
-  // The current (purple) row is always kept in the middle of the list.
+  // The current (highlighted) row is always kept in the middle of the list.
   function scrollToActive(force) {
     const r = S.settings.panel && list.querySelector('.nds-row.on');
     if (!r) return;
