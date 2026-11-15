@@ -14,8 +14,10 @@ Netflixで英語を学ぶ日本語話者のための Chrome 拡張。英日の�
 - **Review** the words you looked up: four kinds of questions, spaced 1 to 21 days apart
 - Keyboard: <kbd>,</kbd> previous line · <kbd>.</kbd> again · <kbd>/</kbd> next line · <kbd>R</kbd> repeat
 
-Works without any API key (free translation and Chrome's built-in AI). A Claude API key makes the
-word explanations faster and better, at about $0.0002 a lookup.
+**No API key needed.** Translation uses Google Translate's free web endpoint (falling back to
+Chrome's on-device translator), the dictionary is built in, and word explanations run on
+Chrome's on-device AI (Gemini Nano) where your Chrome supports it. Add a Claude API key and the
+explanations come from **Claude Haiku 5.5** instead: faster and better, about $0.0002 a lookup.
 
 ![Review tab: a multiple-choice question on a saved phrase, answered.](docs/screenshot-review.png)
 
