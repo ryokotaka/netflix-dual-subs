@@ -1,13 +1,17 @@
 # Netflix Dual Subs
 
-A personal Chrome extension (Manifest V3) for learning English with Netflix, in the spirit of
-Language Reactor: English and Japanese subtitles together, a clickable transcript, an
-idiom-aware hover dictionary, AI explanations of a word *in its context*, and spaced-repetition
-review built from the words you looked up.
+**For Japanese speakers learning English: watch Netflix with English and Japanese subtitles,
+click any word to see what it means in that line, and review the words you looked up.**
 
-![Clicking "pull" in the subtitle: the idiom "pull off", its meaning in this line, who you could say it to, and an example. The transcript panel is on the right, Japanese blurred until hovered.](docs/screenshot-lookup.png)
+Netflixで英語を学ぶ日本語話者のための Chrome 拡張。英日の二重字幕で観ながら、単語をクリックするとその場面での意味が分かり、調べた単語はあとで復習できます。
 
-<p align="center"><img src="docs/screenshot-review.png" width="49%" alt="Review tab: say the saved phrase in English from the Japanese line"></p>
+![Clicking "pull" in the subtitle shows the idiom "pull off", what it means in this line, who you could say it to, and an example. English and Japanese subtitles at the bottom, the transcript on the right.](docs/screenshot-lookup.png)
+
+![Review tab: a multiple-choice question on a saved phrase, answered.](docs/screenshot-review.png)
+
+A Chrome extension (Manifest V3) in the spirit of Language Reactor: dual subtitles, a clickable
+transcript, an idiom-aware hover dictionary, AI explanations of a word *in its context*, and
+spaced-repetition review built from the words you looked up.
 
 <sub>Screenshots use a stand-in player page and made-up dialogue (`tools/screenshots.mjs`); nothing from Netflix is shown.</sub>
 
