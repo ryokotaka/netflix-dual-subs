@@ -24,58 +24,59 @@
 </head>
 <body>
 <main>
-  <h1>Netflix Dual Subs 設定</h1>
-  <p class="note" style="margin-top:0">単語の解説に使うAI：Claude のキーがあれば Claude Haiku（速い）、無ければ Gemini、どちらも無ければ Chrome 内蔵AI。</p>
+  <h1 data-en="Netflix Dual Subs settings">Netflix Dual Subs 設定</h1>
+  <p class="note" style="margin-top:0" data-en="AI for word explanations: Claude Haiku (fast) with a Claude key, otherwise Gemini, otherwise Chrome's built-in AI.">単語の解説に使うAI：Claude のキーがあれば Claude Haiku（速い）、無ければ Gemini、どちらも無ければ Chrome 内蔵AI。</p>
 
-  <label for="ckey">Claude APIキー（おすすめ）</label>
+  <label for="ckey" data-en="Claude API key (recommended)">Claude APIキー（おすすめ）</label>
   <input id="ckey" type="password" placeholder="sk-ant-..." autocomplete="off">
   <div class="row">
-    <button id="csave">保存</button>
-    <button id="ctest">保存してテスト</button>
-    <button id="cclear">削除</button>
+    <button id="csave" data-en="Save">保存</button>
+    <button id="ctest" data-en="Save and test">保存してテスト</button>
+    <button id="cclear" data-en="Delete">削除</button>
   </div>
   <div id="cstatus" class="st"></div>
-  <div class="note">
+  <div class="note" data-en="Create a key in the <a href=&quot;https://platform.claude.com/settings/keys&quot; target=&quot;_blank&quot; style=&quot;color:#93d1b6&quot;>Claude Console</a>. Credit is prepaid (buy it under Billing). <b>As long as auto-reload is off, it never costs more than you bought</b>; when the credit runs out it just stops. What you send is not used to train the AI.">
     キーは <a href="https://platform.claude.com/settings/keys" target="_blank" style="color:#93d1b6">Claude Console</a> で作成。
     クレジットは前払い（Billing で購入）。<b>自動チャージ（auto-reload）をオンにしなければ、買った分以上はかかりません</b>。
     残高がなくなると止まるだけです。送った内容はAIの学習には使われません。
   </div>
 
-  <h2>バックアップ</h2>
-  <div class="note" style="margin-top:0">
+  <h2 data-en="Backup">バックアップ</h2>
+  <div class="note" style="margin-top:0" data-en="Saved words, the lookup history, AI explanations and settings are saved once a day (when something changed) to <b>NetflixDualSubs/backup.json</b> in your Downloads folder, plus a backup-year-month.json each month. <b>API keys are never included</b> (enter them again after restoring).">
     保存した単語・調べた単語の履歴・AIの解説・設定を、ダウンロードフォルダの <b>NetflixDualSubs/backup.json</b> に1日1回（変更があったとき）自動で保存します。
     月が変わると backup-年-月.json も残します。<b>APIキーは含めません</b>（復元後に入れ直してください）。
   </div>
   <div class="row">
-    <button id="bnow">今すぐバックアップ</button>
-    <button id="bpick">バックアップから復元…</button>
+    <button id="bnow" data-en="Back up now">今すぐバックアップ</button>
+    <button id="bpick" data-en="Restore from a backup…">バックアップから復元…</button>
     <input id="bfile" type="file" accept=".json,application/json" hidden>
   </div>
   <div id="bstatus" class="st"></div>
 
-  <h2>Claude の使用量（この拡張で記録）</h2>
+  <h2 data-en="Claude usage (recorded by this extension)">Claude の使用量（この拡張で記録）</h2>
   <div id="usage" class="note" style="margin-top:0"></div>
   <table id="recent"></table>
-  <div class="row"><button id="ureset">記録をリセット</button></div>
-  <div class="note">
+  <div class="row"><button id="ureset" data-en="Reset the log">記録をリセット</button></div>
+  <div class="note" data-en="An estimate from the token counts Claude returns with every answer, at Haiku 5.5 prices ($0.10 input / $0.50 output per million tokens). Your actual bill is under Usage in the Claude Console (in cents, a few minutes behind).">
     Claude が毎回返すトークン数から、Haiku 5.5 の料金（入力 $0.10・出力 $0.50 / 100万トークン）で計算した目安です。
     実際の請求は Claude Console の「支出」で確認できます（セント単位・反映に数分）。
   </div>
 
-  <label for="key">Gemini APIキー（無料・混雑時は遅い）</label>
-  <input id="key" type="password" placeholder="Google AI Studio の APIキー" autocomplete="off">
+  <label for="key" data-en="Gemini API key (free, slow when busy)">Gemini APIキー（無料・混雑時は遅い）</label>
+  <input id="key" type="password" placeholder="Google AI Studio の APIキー" data-en-placeholder="API key from Google AI Studio" autocomplete="off">
   <div class="row">
-    <button id="save">保存</button>
-    <button id="test">保存してテスト</button>
-    <button id="clear">削除（Chrome内蔵AIに戻す）</button>
+    <button id="save" data-en="Save">保存</button>
+    <button id="test" data-en="Save and test">保存してテスト</button>
+    <button id="clear" data-en="Delete (back to Chrome's built-in AI)">削除（Chrome内蔵AIに戻す）</button>
   </div>
   <div id="status"></div>
-  <div class="note">
+  <div class="note" data-en="Create a key in <a href=&quot;https://aistudio.google.com/apikey&quot; target=&quot;_blank&quot; style=&quot;color:#93d1b6&quot;>Google AI Studio</a>. Without a billing account on the project only the free tier is used, so it costs nothing (don't press &quot;Set up billing&quot;). On the free tier, the lines and words you send may be used to improve Google's services. The key is stored only in Chrome on this computer.">
     キーは <a href="https://aistudio.google.com/apikey" target="_blank" style="color:#93d1b6">Google AI Studio</a> で作成できます。
     プロジェクトに請求先（Billing）を設定しなければ無料枠だけが使われ、料金はかかりません（「Set up billing」は押さない）。
     無料枠では、送った字幕の文や単語がGoogleのサービス改善に使われることがあります。キーはこのPCのChromeにだけ保存されます。
   </div>
 </main>
+<script src="lib.js"></script>
 <script src="keystore.js"></script>
 <script src="options.js"></script>
 </body>

@@ -1,8 +1,9 @@
 # Netflix Dual Subs
 
-**A free, open-source take on the ~$40/yr language-learning extensions**, for Japanese speakers
-learning English: watch Netflix with English and Japanese subtitles at the same time, click any word
-to see what it means in that line, and review the words you looked up.
+**A free, open-source take on the ~$40/yr language-learning extensions**, for English learners:
+watch Netflix with English and your own language at the same time, click any word to see what it
+means in that line, and review the words you looked up. **Works in 18 languages**, made first for
+Japanese speakers.
 
 Netflixで英語を学ぶ日本語話者のための Chrome 拡張。英日の二重字幕で観ながら、単語をクリックするとその場面での意味が分かり、調べた単語はあとで復習できます。
 
@@ -10,7 +11,7 @@ Netflixで英語を学ぶ日本語話者のための Chrome 拡張。英日の�
 
 ## What it does
 
-- **English and Japanese at once** (Netflix shows only one), translated line by line instead of the loose official subtitles
+- **English and your language at once** (Netflix shows only one), translated line by line instead of the loose official subtitles
 - The whole episode as a transcript: click a line to jump there
 - **Click a word** → its meaning *in this line*, who you can say it to (friend / colleague / boss), and an example. Idioms like *figure it out* are recognized
 - **Review** the words you looked up: four kinds of questions, spaced 1 to 21 days apart
@@ -83,19 +84,23 @@ options.html / options.js     settings page: keys, usage log, backup / restore
 <details>
 <summary><b>All features</b></summary>
 
-- Japanese is machine-translated by default (official Japanese subtitles are often loose or
-  shortened); official subtitles are one switch away. In the panel it can be blurred until you
-  hover, or shown under the English too.
-- Hovering a word shows the dictionary; hovering the subtitle or the panel pauses the video.
+- Pick your language in ⚙ (Japanese, Korean, Chinese, Spanish, Portuguese, French, German and
+  11 more). Subtitles, word meanings and AI explanations follow it; the UI is Japanese for
+  Japanese and English otherwise.
+- The translation is machine-made by default (official subtitles are often loose or shortened);
+  Netflix's own subtitles in your language are one switch away. In the panel it can be blurred
+  until you hover, or shown under the English too.
+- Hovering a word shows its meaning (an English–Japanese dictionary for Japanese, a translation
+  for other languages); hovering the subtitle or the panel pauses the video.
 - Save words (☆): underlined in the subtitles, listed with ▶ to jump back to the scene,
   exportable to Anki CSV. A history tab keeps every word you clicked.
-- Review questions: meaning (4 choices), fill in the blank, Japanese → English, and listening
+- Review questions: meaning (4 choices), fill in the blank, your language → English, and listening
   (plays the scene with subtitles hidden).
-- Keys: <kbd>J</kbd> show Japanese · <kbd>Q</kbd> pause after each line · <kbd>P</kbd> panel.
+- Keys: <kbd>J</kbd> show the translation · <kbd>Q</kbd> pause after each line · <kbd>P</kbd> panel.
   Matched by physical key, so they work with a Japanese IME on.
 - Sound effects, speaker names and lyrics (`[sighs]`, `NORAH:`, `♪…♪`) are hidden.
 - Without any key: the dictionary is built in, and word explanations run on Chrome's
-  on-device AI (Gemini Nano) where your Chrome supports it.
+  on-device AI (Gemini Nano) where your Chrome supports it (and your language).
 - With a key: Claude Haiku 5.5 (Claude API key), else Gemini (Gemini API key). Keys go in the
   extension's options page.
 

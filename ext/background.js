@@ -51,7 +51,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
   if (msg && msg.type === 'gtranslate') {
-    gtranslateLines(msg.texts)
+    gtranslateLines(msg.texts, msg.tl)
       .then(texts => sendResponse({ ok: true, texts }))
       .catch(e => sendResponse({ ok: false, error: String(e) }));
     return true;
@@ -60,8 +60,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
 // Unofficial endpoint (the one browser translators use): no key, no billing, but it
 // can rate-limit (HTTP 429) or go away. The caller falls back to Chrome's translator.
-async function gtranslate(text) {
-  const url = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=ja&dt=t&q=' + encodeURIComponent(text);
+async function gtranslate(text, tl = 'ja') {
+  const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=${encodeURIComponent(tl)}&dt=t&q=` + encodeURIComponent(text);
   const r = await fetch(url, { credentials: 'omit' });
   if (!r.ok) throw new Error('HTTP ' + r.status);
   const d = await r.json();
@@ -93,7 +93,7 @@ async function claude({ system, prompt, schema }) {
   });
   if (!r.ok) throw new Error('HTTP ' + r.status + ' ' + (await r.text()).slice(0, 800));
   const d = await r.json();
-  if (d.usage) recordUsage(d.usage, (prompt.match(/対象: (.*)$/m) || [])[1] || '');
+  if (d.usage) recordUsage(d.usage, (prompt.match(/(?:対象|Target): (.*)$/m) || [])[1] || '');
   if (d.stop_reason === 'refusal') throw new Error('refusal');
   return d.content.filter(b => b.type === 'text').map(b => b.text).join('');
 }
@@ -229,11 +229,11 @@ async function geminiBench(msg) {
 
 // Translates several lines in one request (one per line); if Google merges or
 // splits lines, falls back to one request per line.
-async function gtranslateLines(lines) {
-  const out = (await gtranslate(lines.join('\n'))).split('\n').map(s => s.trim());
+async function gtranslateLines(lines, tl) {
+  const out = (await gtranslate(lines.join('\n'), tl)).split('\n').map(s => s.trim());
   if (out.length === lines.length) return out;
   const each = [];
-  for (const l of lines) each.push((await gtranslate(l)).trim());
+  for (const l of lines) each.push((await gtranslate(l, tl)).trim());
   return each;
 }
 

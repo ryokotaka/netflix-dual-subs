@@ -2,6 +2,11 @@
 (() => {
   'use strict';
   const N = self.NDS;
+  // The learner's language (settings.lang): subtitles are translated into it, the AI
+  // explains in it, and the UI is Japanese for Japanese and English for everyone else.
+  const lang = () => N.langCode(S.settings.lang);
+  const isJa = () => lang() === 'ja';
+  const L = (ja, en) => (isJa() ? ja : en);
 
   const S = {
     tracksByMovie: {},
@@ -22,14 +27,14 @@
     translating: false,
     status: '',
     saved: [],
-    settings: { quizPool: 'saved', shrinkVideo: false, subSize: '1', subPos: '9', hideSdh: true, showJa: true, jaBlur: true, jaBottom: false, jaOfficial: false, hideNetflix: true, autoPause: false, hoverPause: true, panel: true },
+    settings: { lang: 'ja', quizPool: 'saved', shrinkVideo: false, subSize: '1', subPos: '9', hideSdh: true, showJa: true, jaBlur: true, jaBottom: false, jaOfficial: false, hideNetflix: true, autoPause: false, hoverPause: true, panel: true },
   };
 
   // ---------- storage ----------
   // After the extension is reloaded, a content script left in an open tab loses chrome.*
   // until the page is reloaded; say so instead of throwing.
   const alive = () => { try { return !!chrome.runtime.id; } catch (e) { return false; } };
-  const orphaned = () => { setStatus('拡張機能が更新されました。ページを再読み込みしてください'); return false; };
+  const orphaned = () => { setStatus(L('拡張機能が更新されました。ページを再読み込みしてください', 'The extension was updated. Reload the page.')); return false; };
   const saveSettings = () => alive() ? chrome.storage.local.set({ nds_settings: S.settings }) : orphaned();
   const saveSaved = () => { refreshSavedWords(); return alive() ? chrome.storage.local.set({ nds_saved: S.saved }) : orphaned(); };
 
@@ -47,34 +52,41 @@
     chrome.runtime.sendMessage({ type: 'fetchText', url }, r => (r && r.ok ? res(r.text) : rej(new Error(r ? r.error : 'no response')))));
 
   // ---------- UI ----------
+  // Static text carries both languages; applyUiLang() shows the right one.
+  const t2 = (ja, en) => `data-ja="${esc(ja)}" data-en="${esc(en)}"`;
+  const tr = (ja, en) => `<span ${t2(ja, en)}>${esc(ja)}</span>`;
+  const tt = (ja, en) => `data-tja="${esc(ja)}" data-ten="${esc(en)}"`;
+  const langOptions = Object.entries(N.LANGS).map(([k, [nat, eng]]) => `<option value="${k}">${esc(nat)}${k === 'ja' ? '' : ` (${esc(eng)})`}</option>`).join('');
   const root = document.createElement('div');
   root.id = 'nds-root';
   root.innerHTML = `
     <div id="nds-sub"><div class="nds-en"></div><div class="nds-ja"></div></div>
     <div id="nds-panel">
       <div class="nds-head">
-        <button data-tab="subs" class="on">字幕</button>
-        <button data-tab="saved">保存</button>
-        <button data-tab="quiz">復習<span class="nds-due"></span></button>
-        <button data-tab="hist">履歴</button>
+        <button data-tab="subs" class="on">${tr('字幕', 'Lines')}</button>
+        <button data-tab="saved">${tr('保存', 'Saved')}</button>
+        <button data-tab="quiz">${tr('復習', 'Review')}<span class="nds-due"></span></button>
+        <button data-tab="hist">${tr('履歴', 'History')}</button>
         <span class="nds-sp"></span>
-        <button class="nds-gear" title="設定">⚙</button>
-        <button class="nds-close" title="パネルを閉じる">✕</button>
+        <button class="nds-gear" ${tt('設定', 'Settings')}>⚙</button>
+        <button class="nds-close" ${tt('パネルを閉じる', 'Close the panel')}>✕</button>
       </div>
       <div class="nds-settings" hidden>
-        <label><input type="checkbox" data-k="hideSdh"> 効果音・話者名・歌詞を隠す（[laughs] など）</label>
-        <label><input type="checkbox" data-k="showJa"> 日本語訳を表示</label>
-        <label><input type="checkbox" data-k="jaBlur"> 右の日本語をぼかす（カーソルを合わせると表示）</label>
-        <label><input type="checkbox" data-k="jaBottom"> 動画の下の字幕にも日本語を出す</label>
-        <label><input type="checkbox" data-k="jaOfficial"> Netflix公式の日本語字幕を使う（意訳・省略あり）</label>
-        <label><input type="checkbox" data-k="hideNetflix"> Netflixの字幕を隠す</label>
-        <label><input type="checkbox" data-k="autoPause"> 1文ごとに自動一時停止 (Q)</label>
-        <label><input type="checkbox" data-k="hoverPause"> カーソルで一時停止（字幕の単語・右のパネル）</label>
-        <label><input type="checkbox" data-k="shrinkVideo"> パネルを開いている間は動画を左に縮める</label>
-        <label>字幕の大きさ <select data-k="subSize"><option value="0.8">小</option><option value="1">中</option><option value="1.25">大</option><option value="1.5">特大</option></select></label>
-        <label>字幕の位置 <select data-k="subPos"><option value="4">一番下</option><option value="9">下</option><option value="18">少し上</option><option value="28">上</option></select></label>
-        <div class="nds-gk">単語の解説：<span class="nds-gstate"></span> <button class="nds-gset">APIキーを設定</button></div>
-        <div class="nds-keys">、前の文 ／ 。もう一度 ／ ・次の文 ／ R この文をリピート ／ J 日本語を見る ／ Q 1文ごとに止める ／ P パネル</div>
+        <label>${tr('訳す言語', 'Your language')} <select data-k="lang">${langOptions}</select></label>
+        <label><input type="checkbox" data-k="hideSdh"> ${tr('効果音・話者名・歌詞を隠す（[laughs] など）', 'Hide sound effects, speaker names and lyrics ([laughs] etc.)')}</label>
+        <label><input type="checkbox" data-k="showJa"> ${tr('日本語訳を表示', 'Show the translation')}</label>
+        <label><input type="checkbox" data-k="jaBlur"> ${tr('右の日本語をぼかす（カーソルを合わせると表示）', 'Blur the translation in the panel (hover to see it)')}</label>
+        <label><input type="checkbox" data-k="jaBottom"> ${tr('動画の下の字幕にも日本語を出す', 'Show the translation under the video too')}</label>
+        <label><input type="checkbox" data-k="jaOfficial"> ${tr('Netflix公式の日本語字幕を使う（意訳・省略あり）', "Use Netflix's own subtitles in your language (looser)")}</label>
+        <label><input type="checkbox" data-k="hideNetflix"> ${tr('Netflixの字幕を隠す', "Hide Netflix's subtitles")}</label>
+        <label><input type="checkbox" data-k="autoPause"> ${tr('1文ごとに自動一時停止 (Q)', 'Pause after each line (Q)')}</label>
+        <label><input type="checkbox" data-k="hoverPause"> ${tr('カーソルで一時停止（字幕の単語・右のパネル）', 'Pause while the cursor is on a word or the panel')}</label>
+        <label><input type="checkbox" data-k="shrinkVideo"> ${tr('パネルを開いている間は動画を左に縮める', 'Shrink the video beside the open panel')}</label>
+        <label>${tr('字幕の大きさ', 'Subtitle size')} <select data-k="subSize"><option value="0.8" ${t2('小', 'Small')}>小</option><option value="1" ${t2('中', 'Medium')}>中</option><option value="1.25" ${t2('大', 'Large')}>大</option><option value="1.5" ${t2('特大', 'Extra large')}>特大</option></select></label>
+        <label>${tr('字幕の位置', 'Subtitle position')} <select data-k="subPos"><option value="4" ${t2('一番下', 'Bottom')}>一番下</option><option value="9" ${t2('下', 'Low')}>下</option><option value="18" ${t2('少し上', 'Higher')}>少し上</option><option value="28" ${t2('上', 'High')}>上</option></select></label>
+        <div class="nds-gk">${tr('単語の解説：', 'Word explanations: ')}<span class="nds-gstate"></span> <button class="nds-gset">${tr('APIキーを設定', 'Set an API key')}</button></div>
+        <div class="nds-keys">${tr('、前の文 ／ 。もう一度 ／ ・次の文 ／ R この文をリピート ／ J 日本語を見る ／ Q 1文ごとに止める ／ P パネル',
+          ', previous line / . again / / next line / R repeat this line / J show the translation / Q stop after each line / P panel')}</div>
       </div>
       <div class="nds-status"></div>
       <div class="nds-list"></div>
@@ -82,12 +94,19 @@
       <div class="nds-quiz" hidden></div>
       <div class="nds-hist" hidden></div>
     </div>
-    <button id="nds-open" title="字幕パネル (P)">字</button>
+    <button id="nds-open" ${tt('字幕パネル (P)', 'Subtitle panel (P)')}>${tr('字', 'Aa')}</button>
     <div id="nds-pop" hidden></div>`;
 
   const subEn = $('.nds-en', root), subJa = $('.nds-ja', root), panel = $('#nds-panel', root);
   const list = $('.nds-list', root), savedBox = $('.nds-saved', root), quizBox = $('.nds-quiz', root), histBox = $('.nds-hist', root), pop = $('#nds-pop', root);
   const statusEl = $('.nds-status', root), settingsBox = $('.nds-settings', root);
+  function applyUiLang() {
+    const k = isJa() ? 'ja' : 'en';
+    root.querySelectorAll('[data-ja]').forEach(e => { e.textContent = e.dataset[k]; });
+    root.querySelectorAll('[data-tja]').forEach(e => { e.title = isJa() ? e.dataset.tja : e.dataset.ten; });
+    root.lang = k;
+    setAi(S.ai);
+  }
 
   function mount() {
     const host = document.fullscreenElement || document.body;
@@ -114,13 +133,24 @@
     S.settings[k] = e.target.type === 'checkbox' ? e.target.checked : e.target.value; saveSettings(); applySettings();
     if (k === 'jaOfficial') applyJaMode();
     if (k === 'hideSdh') S.movieId = null; // rebuild the lines: the 100 ms tick restarts this movie
+    if (k === 'lang') onLangChange();
   });
+  // Another language: new translations (the lines are rebuilt), a new on-device
+  // translator and AI session, and the UI text.
+  function onLangChange() {
+    applyUiLang();
+    S.translator = null; lmBase = null; lmState = 'unknown'; ctxCache.clear(); defCache.clear();
+    S.movieId = null;
+    if (!savedBox.hidden) renderSaved();
+    if (!quizBox.hidden) nextQuiz();
+    if (!histBox.hidden) renderHistory();
+  }
   // The AI keys are entered on the extension's options page and never come into this
   // page: background.js holds them (keystore.js). Here we only get the flag nds_ai saying
   // which AI is set up: Claude, else Gemini, else Chrome's built-in model.
   const setAi = ai => {
     S.ai = ai || '';
-    $('.nds-gstate', root).textContent = { claude: 'Claude Haiku', gemini: 'Gemini（無料枠）', '': 'Chrome 内蔵AI' }[S.ai];
+    $('.nds-gstate', root).textContent = { claude: 'Claude Haiku', gemini: L('Gemini（無料枠）', 'Gemini (free tier)'), '': L('Chrome 内蔵AI', "Chrome's built-in AI") }[S.ai];
     ctxCache.clear();
   };
   $('.nds-gset', root).onclick = () => (alive() ? chrome.runtime.sendMessage({ type: 'openOptions' }) : orphaned());
@@ -267,7 +297,7 @@
   function startMovie(id) {
     S.movieId = id; S.cues = []; S.idx = -1; S.source = 'none'; S.jaSource = 'none'; S.hasOfficialJa = false; S.pausedAt = -1; S.hold = null; if (S.repeat >= 0) setRepeat(-1);
     list.innerHTML = ''; renderSub(); applySettings();
-    setStatus('字幕を読み込み中…');
+    setStatus(L('字幕を読み込み中…', 'Loading subtitles…'));
     clearTimeout(domTimer);
     if (S.tracksByMovie[id]) loadTracks(id);
     domTimer = setTimeout(() => { if (S.movieId === id && S.source === 'none') startDomMode(); }, 9000);
@@ -296,18 +326,18 @@
     try {
       const en = await loadSub(pickTrack(S.tracksByMovie[id], 'en'));
       if (S.movieId !== id) return;
-      if (!en) { setStatus('この作品は英語字幕が見つかりませんでした'); return; }
+      if (!en) { setStatus(L('この作品は英語字幕が見つかりませんでした', 'No English subtitles for this title')); return; }
       S.cues = en.map(c => ({ start: c.start, end: c.end, en: spoken(c.text), ja: '' })).filter(c => c.en);
       S.source = 'track';
       const ja = await loadJa(id);
       if (S.movieId !== id) return;
-      setStatus(!ja && S.settings.jaOfficial ? 'Netflixの日本語字幕がないため、機械翻訳を使います' : '');
+      setStatus(!ja && S.settings.jaOfficial ? L('Netflixの日本語字幕がないため、機械翻訳を使います', 'Netflix has no subtitles in your language here, so machine translation is used') : '');
       applyJaMode(); applySettings();
       checkPendingSeek(id);
     } catch (e) {
       if (!alive()) return orphaned(); // extension reloaded: already told the user to reload the page
       console.warn('[NDS] subtitle load failed', e);
-      setStatus('字幕の取得に失敗しました。ページを再読み込みしてください');
+      setStatus(L('字幕の取得に失敗しました。ページを再読み込みしてください', 'Could not load the subtitles. Reload the page.'));
     } finally {
       if (S.loadingId === id) S.loadingId = null;
     }
@@ -316,7 +346,7 @@
   // Loads Netflix's Japanese subtitles into cue.jaNf; false when there are none (yet).
   async function loadJa(id) {
     let ja = null;
-    try { ja = await loadSub(pickTrack(S.tracksByMovie[id], 'ja')); } catch (e) { /* machine translation still works */ }
+    try { ja = await loadSub(pickTrack(S.tracksByMovie[id], N.netflixLang(lang()))); } catch (e) { /* machine translation still works */ }
     if (!ja || S.movieId !== id || S.source !== 'track') return false;
     N.alignCues(S.cues, ja).forEach((t, k) => { S.cues[k].jaNf = t; });
     S.hasOfficialJa = true;
@@ -338,7 +368,7 @@
   // but the list only grows as you watch).
   function startDomMode() {
     S.source = 'dom'; S.jaSource = 'machine';
-    setStatus('簡易モード：Netflixの字幕を英語にしてください（一覧は再生に合わせて増えます）');
+    setStatus(L('簡易モード：Netflixの字幕を英語にしてください（一覧は再生に合わせて増えます）', "Simple mode: set Netflix's subtitles to English (the list grows as it plays)"));
     startMachineTranslation();
     checkPendingSeek(S.movieId);
     let last = '';
@@ -361,28 +391,28 @@
   // Chrome's built-in Translator API (on-device), used when Google translate fails.
   async function initTranslator(fromGesture) {
     if (S.translator) return pumpTranslations();
-    if (!('Translator' in self)) { setStatus('このChromeでは内蔵翻訳が使えません（Chrome 138以降のPC版が必要）'); return; }
+    if (!('Translator' in self)) { setStatus(L('このChromeでは内蔵翻訳が使えません（Chrome 138以降のPC版が必要）', "This Chrome has no built-in translator (desktop Chrome 138 or later)")); return; }
     try {
-      const opts = { sourceLanguage: 'en', targetLanguage: 'ja' };
+      const opts = { sourceLanguage: 'en', targetLanguage: N.chromeLang(lang()) };
       const av = await Translator.availability(opts);
-      if (av === 'unavailable') { setStatus('英→日の内蔵翻訳がこの環境では使えません'); return; }
+      if (av === 'unavailable') { setStatus(L('英→日の内蔵翻訳がこの環境では使えません', `Chrome's built-in translator can't do English → ${N.LANGS[lang()][1]} here`)); return; }
       if (av !== 'available' && !fromGesture) {
         setStatus('');
-        statusEl.innerHTML = '翻訳モデルが未ダウンロードです <button class="nds-dl">ダウンロードして有効化</button>';
+        statusEl.innerHTML = L('翻訳モデルが未ダウンロードです <button class="nds-dl">ダウンロードして有効化</button>', 'The translation model is not downloaded <button class="nds-dl">Download and turn on</button>');
         statusEl.hidden = false;
         $('.nds-dl', statusEl).onclick = e => { e.stopPropagation(); initTranslator(true); };
         return;
       }
-      setStatus('翻訳モデルを準備中…');
+      setStatus(L('翻訳モデルを準備中…', 'Preparing the translation model…'));
       S.translator = await Translator.create({
         ...opts,
-        monitor(m) { m.addEventListener('downloadprogress', e => setStatus(`翻訳モデルをダウンロード中… ${Math.round(e.loaded * 100)}%`)); },
+        monitor(m) { m.addEventListener('downloadprogress', e => setStatus(L('翻訳モデルをダウンロード中… ', 'Downloading the translation model… ') + Math.round(e.loaded * 100) + '%')); },
       });
       setStatus('');
       pumpTranslations();
     } catch (e) {
       console.warn('[NDS] translator', e);
-      setStatus('翻訳の準備に失敗しました');
+      setStatus(L('翻訳の準備に失敗しました', 'Could not set up translation'));
     }
   }
 
@@ -392,7 +422,7 @@
   const googleOk = () => Date.now() - S.googleFailedAt > 10 * 60 * 1000;
   const startMachineTranslation = () => (googleOk() ? pumpTranslations() : initTranslator(false));
   const googleTranslate = texts => !alive() ? (orphaned(), Promise.reject(new Error('extension reloaded'))) : new Promise((res, rej) =>
-    chrome.runtime.sendMessage({ type: 'gtranslate', texts }, r => (r && r.ok ? res(r.texts) : rej(new Error(r ? r.error : 'no response')))));
+    chrome.runtime.sendMessage({ type: 'gtranslate', texts, tl: lang() }, r => (r && r.ok ? res(r.texts) : rej(new Error(r ? r.error : 'no response')))));
 
   // Dialogue cues ("-Hi.\n-Hey.") are translated one speaker at a time; other
   // multi-line cues are a single sentence wrapped, so translate them joined.
@@ -492,18 +522,31 @@
 
   // The first sense stays visible; the rest is hidden while the AI explanation is shown
   // (the dictionary is folded) and comes back with the 辞書をもっと見る button.
+  // mean === null: the dictionary is English–Japanese, so for other languages the word is
+  // translated instead (filled in by showPop, cached per word).
   function entryHtml(head, mean, kind, maxSenses = 5) {
-    const [first, ...rest] = mean.split(' / ').slice(0, maxSenses).map(esc);
+    const [first, ...rest] = mean === null ? ['…'] : mean.split(' / ').slice(0, maxSenses).map(esc);
     return `<div class="nds-e"><div class="nds-eh"><b>${esc(head)}</b>` +
       (kind ? `<span class="nds-kind">${kind}</span>` : '') +
-      `<button class="nds-star" data-head="${esc(head)}" title="保存">☆</button></div>` +
-      `<div class="nds-em">${first}${rest.length ? `<span class="nds-more"><br>${rest.join('<br>')}</span>` : ''}</div></div>`;
+      `<button class="nds-star" data-head="${esc(head)}" title="${L('保存', 'Save')}">☆</button></div>` +
+      `<div class="nds-em"${mean === null ? ` data-def="${esc(head)}"` : ''}>${first}${rest.length ? `<span class="nds-more"><br>${rest.join('<br>')}</span>` : ''}</div></div>`;
   }
+  const defCache = new Map(); // word -> Promise<translation>, for languages other than Japanese
+  const defOf = head => {
+    if (!defCache.has(head)) defCache.set(head, translateBatch([head]).then(o => (o && o[0]) || '').catch(() => ''));
+    return defCache.get(head);
+  };
   function showPop(anchor, ctx) {
     let html = '';
-    if (ctx.phrase) html += entryHtml(ctx.phrase.head, ctx.phrase.mean, '熟語');
-    if (ctx.word) html += entryHtml(ctx.word.head, ctx.word.mean, ctx.phrase ? '単語' : '', ctx.phrase ? 2 : 5);
-    if (!html) html = `<div class="nds-e"><b>${esc(ctx.surface)}</b><div class="nds-em">辞書に見つかりませんでした</div></div>`;
+    ctx.defs = ctx.defs || {};
+    if (isJa()) {
+      if (ctx.phrase) html += entryHtml(ctx.phrase.head, ctx.phrase.mean, '熟語');
+      if (ctx.word) html += entryHtml(ctx.word.head, ctx.word.mean, ctx.phrase ? '単語' : '', ctx.phrase ? 2 : 5);
+      if (!html) html = `<div class="nds-e"><b>${esc(ctx.surface)}</b><div class="nds-em">辞書に見つかりませんでした</div></div>`;
+    } else {
+      if (ctx.phrase) html += entryHtml(ctx.phrase.head, null, 'idiom');
+      html += entryHtml(ctx.word ? ctx.word.head : ctx.surface, null, ctx.phrase ? 'word' : '');
+    }
     const withAi = !!(S.ai || lmState !== 'unavailable');
     const fold = withAi && /nds-more/.test(html);
     pop.innerHTML = (withAi ? '<div class="nds-ctx"></div>' : '') +
@@ -512,6 +555,10 @@
     pop.querySelectorAll('.nds-star').forEach(b => {
       if (S.saved.some(s => s.head === b.dataset.head)) { b.textContent = '★'; b.classList.add('on'); }
     });
+    pop.querySelectorAll('[data-def]').forEach(el => defOf(el.dataset.def).then(d => {
+      ctx.defs[el.dataset.def] = d;
+      if (el.isConnected) { el.textContent = d || '—'; if (popAnchor) placePop(popAnchor); }
+    }));
     pop.hidden = false;
     placePop(anchor);
   }
@@ -543,7 +590,7 @@
     if (at >= 0) { S.saved.splice(at, 1); b.textContent = '☆'; b.classList.remove('on'); }
     else {
       const ent = [hoverCtx.phrase, hoverCtx.word].find(x => x && x.head === head);
-      S.saved.unshift({ head, mean: ent ? ent.mean : '', ctx: hoverCtx.ctxMean || '', info: hoverCtx.ctxInfo || null, context: hoverCtx.cue.en.replace(/\n/g, ' '),
+      S.saved.unshift({ head, mean: isJa() ? (ent ? ent.mean : '') : (hoverCtx.defs || {})[head] || '', ctx: hoverCtx.ctxMean || '', info: hoverCtx.ctxInfo || null, context: hoverCtx.cue.en.replace(/\n/g, ' '),
         ja: (hoverCtx.cue.ja || '').replace(/\n/g, ' '), ...around(hoverCtx.cue), movieId: S.movieId, title: S.title || '', time: hoverCtx.cue.start, at: Date.now() });
       b.textContent = '★'; b.classList.add('on');
     }
@@ -589,42 +636,17 @@
   pop.addEventListener('mouseleave', e => { if (S.inPanel) leavePanel(e); });
 
   // ---------- meaning in context (Chrome's built-in AI, Gemini Nano: free, on-device) ----------
-  const LM_OPTS = { expectedInputs: [{ type: 'text', languages: ['en'] }], expectedOutputs: [{ type: 'text', languages: ['ja', 'en'] }] };
-  // The model fills the fields in this order, so who-can-you-say-it-to and the example's
-  // audience are decided before the example is written. The ratings are about the phrase
-  // itself (if you said it), not about this scene, which is usually casual.
-  const LM_SYSTEM = 'あなたは日本人の英語学習者を助ける先生です。英語の字幕の1文（前後の文つき）と、その中の単語または熟語が与えられます。' +
-    'その語を学ぶのに役立つ情報を答えてください。' +
-    'meaning: この文での意味（日本語、20文字以内）。usage: この場面での使われ方・ニュアンス・話し手の気持ち（日本語、60文字以内）。' +
-    'toFriend / toColleague / toSuperior: この場面に関係なく、この意味でのこの言い方を学習者自身が友人／同僚／上司など目上に言ってよいか' +
-    '（◎自然 ○使える △避けた方が無難 ×失礼・不適切）。' +
-    'pattern: よく使う形やコロケーション（英語、～で可変部分）。' +
-    'exampleTo: 例文を言う相手。toFriend / toColleague / toSuperior で◎か○の相手から選ぶ（どの相手にも自然なら 誰でも）。' +
-    'example: patternを使い、exampleTo の相手に言う短く自然な英語の例文。exampleJa: その日本語訳。';
-  const AUDIENCE = ['◎', '○', '△', '×'];
-  const LM_SCHEMA = {
-    type: 'object',
-    properties: {
-      meaning: { type: 'string' },
-      usage: { type: 'string' },
-      // who you could say it to: one symbol each, so it costs only a few tokens
-      toFriend: { type: 'string', enum: AUDIENCE },
-      toColleague: { type: 'string', enum: AUDIENCE },
-      toSuperior: { type: 'string', enum: AUDIENCE },
-      pattern: { type: 'string' },
-      exampleTo: { type: 'string', enum: ['友人に', '同僚に', '上司に', '誰でも'] },
-      example: { type: 'string' },
-      exampleJa: { type: 'string' },
-    },
-    required: ['meaning', 'usage', 'toFriend', 'toColleague', 'toSuperior', 'pattern', 'exampleTo', 'example', 'exampleJa'],
-    additionalProperties: false,
-  };
-  const ctxCache = new Map(); // ctxKey -> Promise<info object (LM_SCHEMA)>, requests in flight / this page
+  const lmOpts = () => ({ expectedInputs: [{ type: 'text', languages: ['en'] }],
+    expectedOutputs: [{ type: 'text', languages: [...new Set([N.chromeLang(lang()).split('-')[0], 'en'])] }] });
+  // The instruction and the answer's JSON schema (lib.js) follow the learner's language.
+  const lmSystem = () => N.lmSystem(lang());
+  const lmSchema = () => N.lmSchema(lang());
+  const ctxCache = new Map(); // ctxKey -> Promise<info object (lib.js lmSchema)>, requests in flight / this page
 
   // Answers are kept per episode + line + word: the same word in another line is a different
   // context and is asked again; looking it up again in the same line (rewatching, reloading)
   // costs nothing. Newest 3000 kept in chrome.storage.local (no secrets in them).
-  const ctxKey = ctx => `${S.movieId}|${ctx.cue.start}|${ctx.target.toLowerCase()}`;
+  const ctxKey = ctx => `${isJa() ? '' : lang() + '|'}${S.movieId}|${ctx.cue.start}|${ctx.target.toLowerCase()}`;
   let ctxStore = {}, ctxSaveTimer = null;
   if (alive()) chrome.storage.local.get('nds_ctx', r => { ctxStore = r.nds_ctx || {}; });
   function rememberCtx(key, info) {
@@ -641,17 +663,17 @@
   async function lmInit(fromGesture) {
     if (lmBase || lmState === 'loading') return;
     let av = 'unavailable';
-    try { if ('LanguageModel' in self) av = await LanguageModel.availability(LM_OPTS); } catch (e) { /* unavailable */ }
+    try { if ('LanguageModel' in self) av = await LanguageModel.availability(lmOpts()); } catch (e) { /* unavailable */ }
     if (av === 'unavailable') { lmState = 'unavailable'; return; }
     if (av !== 'available' && !fromGesture) { lmState = 'downloadable'; return; } // downloading needs a click
     lmState = 'loading';
     try {
       lmBase = await LanguageModel.create({
-        ...LM_OPTS,
-        initialPrompts: [{ role: 'system', content: LM_SYSTEM }],
+        ...lmOpts(),
+        initialPrompts: [{ role: 'system', content: lmSystem() }],
         monitor(m) {
           m.addEventListener('downloadprogress', e => {
-            const box = $('.nds-ctx', pop); if (box) box.textContent = `AIモデルをダウンロード中… ${Math.round(e.loaded * 100)}%`;
+            const box = $('.nds-ctx', pop); if (box) box.textContent = L('AIモデルをダウンロード中… ', 'Downloading the AI model… ') + Math.round(e.loaded * 100) + '%';
           });
         },
       });
@@ -678,14 +700,14 @@
       if (hoverCtx !== ctx) return;
       if (lmState === 'unavailable') { box.remove(); return; }
       if (lmState === 'downloadable') {
-        box.innerHTML = '文脈での意味を出すには <button class="nds-lm">AIモデルをダウンロード（数GB・無料）</button>';
+        box.innerHTML = L('文脈での意味を出すには <button class="nds-lm">AIモデルをダウンロード（数GB・無料）</button>', 'For the meaning in context, <button class="nds-lm">download the AI model (a few GB, free)</button>');
         return;
       }
-      if (lmState === 'loading') { box.textContent = 'AIモデルを準備中…'; return; }
+      if (lmState === 'loading') { box.textContent = L('AIモデルを準備中…', 'Preparing the AI model…'); return; }
     }
     const ask = { claude: askClaude, gemini: askGemini }[S.ai] || askNano;
     if (!ctxCache.has(key)) ctxCache.set(key, ask(contextPrompt(ctx.cue, ctx.target)).then(info => { rememberCtx(key, info); return info; }));
-    box.textContent = 'この文での使われ方：考え中…';
+    box.textContent = L('この文での使われ方：考え中…', 'Thinking about this line…');
     try {
       show(await ctxCache.get(key));
       if (request) recordHistory(ctx, ctx.ctxInfo);
@@ -694,67 +716,67 @@
       ctxCache.delete(key);
       if (hoverCtx === ctx) {
         const ai = S.ai === 'claude' ? 'Claude' : 'Gemini';
-        box.textContent = /credit balance/i.test(e) ? '（Claudeのクレジット残高がありません）'
-          : /HTTP 429/.test(e) ? `（${ai}の回数制限です。少し待ってからもう一度）`
-          : /HTTP 40[013]/.test(e) ? `（${ai}のAPIキーを確認してください）`
-          : /HTTP 5\d\d/.test(e) ? `（${ai}が混雑しています。少し待ってからもう一度）` : '（文脈での意味を取得できませんでした）';
+        box.textContent = /credit balance/i.test(e) ? L('（Claudeのクレジット残高がありません）', '(No Claude credit left)')
+          : /HTTP 429/.test(e) ? L(`（${ai}の回数制限です。少し待ってからもう一度）`, `(${ai} rate limit: try again in a moment)`)
+          : /HTTP 40[013]/.test(e) ? L(`（${ai}のAPIキーを確認してください）`, `(Check your ${ai} API key)`)
+          : /HTTP 5\d\d/.test(e) ? L(`（${ai}が混雑しています。少し待ってからもう一度）`, `(${ai} is busy: try again in a moment)`)
+          : L('（文脈での意味を取得できませんでした）', '(Could not get the meaning in context)');
       }
     }
   }
 
   function contextPrompt(cue, target) {
-    const k = S.cues.indexOf(cue), line = c => c.en.replace(/\n/g, ' ');
-    return (S.cues[k - 1] ? `前の文: ${line(S.cues[k - 1])}\n` : '') + `文: ${line(cue)}\n` +
-      (S.cues[k + 1] ? `次の文: ${line(S.cues[k + 1])}\n` : '') + `対象: ${target}`;
+    const k = S.cues.indexOf(cue), line = c => (c ? c.en.replace(/\n/g, ' ') : '');
+    return N.contextPrompt(lang(), line(S.cues[k - 1]), line(cue), line(S.cues[k + 1]), target);
   }
 
   async function askNano(prompt) {
     const s = await lmBase.clone(); // fresh conversation each time so lookups don't pile up
-    try { return JSON.parse(await s.prompt(prompt, { responseConstraint: LM_SCHEMA })); } finally { s.destroy(); }
+    try { return JSON.parse(await s.prompt(prompt, { responseConstraint: lmSchema() })); } finally { s.destroy(); }
   }
 
   // Claude / Gemini APIs through background.js (it holds the keys).
-  const GEMINI_SCHEMA = { // Gemini's schema dialect
-    type: 'OBJECT',
-    properties: Object.fromEntries(LM_SCHEMA.required.map(k => [k, LM_SCHEMA.properties[k].enum
-      ? { type: 'STRING', enum: LM_SCHEMA.properties[k].enum } : { type: 'STRING' }])),
-    required: LM_SCHEMA.required,
-    propertyOrdering: LM_SCHEMA.required,
-  };
   const viaBackground = (type, schema) => prompt => {
     if (!alive()) { orphaned(); return Promise.reject(new Error('extension reloaded')); }
     return new Promise((res, rej) => chrome.runtime.sendMessage(
-      { type, system: LM_SYSTEM, prompt, schema },
+      { type, system: lmSystem(), prompt, schema: schema() },
       r => (r && r.ok ? res(JSON.parse(r.text)) : rej(new Error(r ? r.error : 'no response')))));
   };
-  const askClaude = viaBackground('claude', LM_SCHEMA); // plain JSON Schema
-  const askGemini = viaBackground('gemini', GEMINI_SCHEMA);
+  const askClaude = viaBackground('claude', lmSchema); // plain JSON Schema
+  const askGemini = viaBackground('gemini', () => N.geminiSchema(lmSchema()));
 
   function infoHtml(info) {
     const row = (label, v) => (v ? `<div class="nds-ci"><span class="nds-cl">${label}</span>${v}</div>` : '');
-    return `<div class="nds-cm"><span class="nds-kind">この文で</span> <b>${esc(info.meaning)}</b></div>` +
-      row('使われ方', esc(info.usage)) +
-      row('使える相手', audienceHtml(info)) +
-      row('よく使う形', esc(info.pattern)) +
-      row('例', info.example ? `${info.exampleTo ? `<span class="nds-to">&lt;${esc(info.exampleTo)}&gt;</span> ` : ''}` +
+    return `<div class="nds-cm"><span class="nds-kind">${L('この文で', 'In this line')}</span> <b>${esc(info.meaning)}</b></div>` +
+      row(L('使われ方', 'Usage'), esc(info.usage)) +
+      row(L('使える相手', 'Say it to'), audienceHtml(info)) +
+      row(L('よく使う形', 'Pattern'), esc(info.pattern)) +
+      row(L('例', 'Example'), info.example ? `${info.exampleTo ? `<span class="nds-to">&lt;${esc(toLabel(info.exampleTo))}&gt;</span> ` : ''}` +
         `${esc(info.example)}<div class="nds-cx">${esc(info.exampleJa || '')}</div>` : '');
   }
   // "友人◎ 同僚○ 目上△"; answers saved before this had none
   function audienceHtml(info) {
     if (!info.toSuperior) return '';
     const mark = m => `<span class="nds-aud${m === '△' || m === '×' ? ' ng' : ''}">${esc(m)}</span>`;
-    return `友人${mark(info.toFriend)} 同僚${mark(info.toColleague)} 目上${mark(info.toSuperior)}`;
+    const [f, c, b] = L(['友人', '同僚', '目上'], ['friend ', 'colleague ', 'boss ']);
+    return `${f}${mark(info.toFriend)} ${c}${mark(info.toColleague)} ${b}${mark(info.toSuperior)}`;
   }
-  const audienceText = info => (info && info.toSuperior ? `友人${info.toFriend} 同僚${info.toColleague} 目上${info.toSuperior}` : '');
+  const audienceText = info => {
+    if (!info || !info.toSuperior) return '';
+    const [f, c, b] = L(['友人', '同僚', '目上'], ['friend ', 'colleague ', 'boss ']);
+    return `${f}${info.toFriend} ${c}${info.toColleague} ${b}${info.toSuperior}`;
+  };
+  // the example's audience: Japanese answers say it in Japanese, others use these words
+  const toLabel = t => ({ friend: 'to a friend', colleague: 'to a colleague', boss: 'to your boss', anyone: 'to anyone' }[t] || t);
 
   // ---------- saved words ----------
   function renderSaved() {
-    if (!S.saved.length) { savedBox.innerHTML = '<div class="nds-empty">単語にカーソルを合わせて ☆ を押すと保存できます</div>'; return; }
-    savedBox.innerHTML = `<div class="nds-sbar">${S.saved.length}件 <button class="nds-csv">Anki用CSVを保存</button></div>` +
+    if (!S.saved.length) { savedBox.innerHTML = `<div class="nds-empty">${L('単語にカーソルを合わせて ☆ を押すと保存できます', 'Hover a word and press ☆ to save it')}</div>`; return; }
+    savedBox.innerHTML = `<div class="nds-sbar">${S.saved.length}${L('件', ' words')} <button class="nds-csv">${L('Anki用CSVを保存', 'Save as Anki CSV')}</button></div>` +
       S.saved.map((s, k) => `<div class="nds-srow"><div><b>${esc(s.head)}</b> <span class="nds-sm">${esc(s.ctx || s.mean.split(' / ')[0])}</span></div>` +
         `<div class="nds-sc">${esc(s.context)}</div>` +
         (s.time != null ? `<button class="nds-go" data-k="${k}">▶ ${esc(s.title ? s.title + ' ' : '')}${fmt(s.time)}</button>` : '') +
-        `<button class="nds-del" data-k="${k}" title="削除">✕</button></div>`).join('');
+        `<button class="nds-del" data-k="${k}" title="${L('削除', 'Delete')}">✕</button></div>`).join('');
   }
   savedBox.addEventListener('click', e => {
     if (e.target.closest('.nds-del')) { S.saved.splice(+e.target.dataset.k, 1); saveSaved(); renderSaved(); return; }
@@ -762,10 +784,11 @@
     if (go) return goToSaved(S.saved[+go.dataset.k]);
     if (e.target.closest('.nds-csv')) {
       const q = s => '"' + String(s).replace(/"/g, '""') + '"';
-      const study = s => !s.info ? (s.ctx ? 'この文で: ' + s.ctx + '<br><br>' : '') :
-        `この文で: ${s.info.meaning}<br>使われ方: ${s.info.usage}<br>` +
-        (audienceText(s.info) ? `使える相手: ${audienceText(s.info)}<br>` : '') +
-        `よく使う形: ${s.info.pattern}<br>例: ${s.info.exampleTo ? `<${s.info.exampleTo}> ` : ''}${s.info.example} — ${s.info.exampleJa}<br><br>`;
+      const [inLine, usage, sayTo, pattern, example] = L(['この文で', '使われ方', '使える相手', 'よく使う形', '例'], ['In this line', 'Usage', 'Say it to', 'Pattern', 'Example']);
+      const study = s => !s.info ? (s.ctx ? `${inLine}: ${s.ctx}<br><br>` : '') :
+        `${inLine}: ${s.info.meaning}<br>${usage}: ${s.info.usage}<br>` +
+        (audienceText(s.info) ? `${sayTo}: ${audienceText(s.info)}<br>` : '') +
+        `${pattern}: ${s.info.pattern}<br>${example}: ${s.info.exampleTo ? `<${toLabel(s.info.exampleTo)}> ` : ''}${s.info.example} — ${s.info.exampleJa}<br><br>`;
       const csv = S.saved.map(s => [q(s.head), q(study(s) +
         s.mean.replace(/ \/ /g, '<br>') + '<br><br>' + s.context + (s.ja ? '<br>' + s.ja : ''))].join(',')).join('\n');
       const a = document.createElement('a');
@@ -827,13 +850,13 @@
     if (!alive()) return;
     chrome.storage.local.get('nds_history', ({ nds_history: h = [] }) => {
       history = h;
-      if (!h.length) { histBox.innerHTML = '<div class="nds-empty">単語をクリックしてAIの解説を出すと、ここに残ります</div>'; return; }
+      if (!h.length) { histBox.innerHTML = `<div class="nds-empty">${L('単語をクリックしてAIの解説を出すと、ここに残ります', 'Words you click for an AI explanation are kept here')}</div>`; return; }
       const starred = new Set(S.saved.map(sceneKey));
-      histBox.innerHTML = `<div class="nds-sbar">${h.length}件（クリックして調べた単語）</div>` +
+      histBox.innerHTML = `<div class="nds-sbar">${h.length}${L('件（クリックして調べた単語）', ' words you clicked')}</div>` +
         h.slice(0, 300).map((x, k) => `<div class="nds-srow"><div><b>${esc(x.head)}</b> <span class="nds-sm">${esc(x.ctx || '')}</span></div>` +
           `<div class="nds-sc">${esc(x.context)}</div>` +
           `<button class="nds-go" data-k="${k}">▶ ${esc(x.title ? x.title + ' ' : '')}${fmt(x.time)}</button>` +
-          `<button class="nds-hstar${starred.has(sceneKey(x)) ? ' on' : ''}" data-k="${k}" title="☆ 保存して復習に入れる">${starred.has(sceneKey(x)) ? '★' : '☆'}</button></div>`).join('');
+          `<button class="nds-hstar${starred.has(sceneKey(x)) ? ' on' : ''}" data-k="${k}" title="${L('☆ 保存して復習に入れる', '☆ Save it for review')}">${starred.has(sceneKey(x)) ? '★' : '☆'}</button></div>`).join('');
     });
   }
   histBox.addEventListener('click', e => {
@@ -842,7 +865,7 @@
     const st = e.target.closest('.nds-hstar');
     if (!st || st.classList.contains('on')) return;
     const x = history[+st.dataset.k];
-    const w = S.dict && N.lookupWord(S.dict, x.head.split(' ')[0]);
+    const w = isJa() && S.dict && N.lookupWord(S.dict, x.head.split(' ')[0]);
     S.saved.unshift({ head: x.head, mean: (x.head.includes(' ') ? '' : w && w.mean) || x.ctx || '', ctx: x.ctx, info: x.info,
       context: x.context, ja: x.ja, prevEn: x.prevEn, prevJa: x.prevJa, nextEn: x.nextEn, nextJa: x.nextJa,
       movieId: x.movieId, title: x.title, time: x.time, at: Date.now() });
@@ -888,12 +911,12 @@
   function nextQuiz(all) {
     S.playUntil = 0; root.classList.remove('nds-listening');
     const everything = quizPool();
-    const head = `<div class="nds-qtop">出題 <select class="nds-qpool"><option value="saved">☆ 保存した単語</option>` +
-      `<option value="all">調べた単語すべて</option></select></div>`;
+    const head = `<div class="nds-qtop">${L('出題', 'From')} <select class="nds-qpool"><option value="saved">${L('☆ 保存した単語', '☆ saved words')}</option>` +
+      `<option value="all">${L('調べた単語すべて', 'every word looked up')}</option></select></div>`;
     const pool = all ? everything : everything.filter(isDue);
-    if (!everything.length) { quizBox.innerHTML = head + '<div class="nds-empty">単語を ☆ で保存するか、クリックして調べると、ここで復習できます</div>'; return setPoolSelect(); }
+    if (!everything.length) { quizBox.innerHTML = head + `<div class="nds-empty">${L('単語を ☆ で保存するか、クリックして調べると、ここで復習できます', 'Save words with ☆ or click them to look them up, and review them here')}</div>`; return setPoolSelect(); }
     if (!pool.length) {
-      quizBox.innerHTML = head + '<div class="nds-empty">今日の復習は終わりです 🎉<br><button class="nds-qall">全部から出題する</button></div>';
+      quizBox.innerHTML = head + `<div class="nds-empty">${L('今日の復習は終わりです 🎉', 'Done for today 🎉')}<br><button class="nds-qall">${L('全部から出題する', 'Quiz me on everything')}</button></div>`;
       return setPoolSelect();
     }
     const s = pool.slice().sort((a, b) => (srsOf(a).due || 0) - (srsOf(b).due || 0))[Math.floor(Math.random() * Math.min(3, pool.length))];
@@ -909,18 +932,18 @@
     quiz = { s, kind, choices, answered: false, all };
     const line = esc(plain(s.context));
     const q = {
-      blank: `<div class="nds-qq">空欄に入る語は？</div><div class="nds-ql">${line.replace(wordRe(s.head, 'i'), '<b>＿＿＿</b>')}</div>`,
-      meaning: `<div class="nds-qq">この文での <b>${esc(s.head)}</b> の意味は？</div><div class="nds-ql">${line.replace(wordRe(s.head, 'i'), '<b>$1</b>')}</div>`,
-      ja2en: `<div class="nds-qq">英語で言ってみよう（頭の中か声に出して）</div><div class="nds-ql">${esc(s.ja)}</div>` +
-        `<div class="nds-cx">ヒント：「${esc(meaningOf(s))}」にあたる語句を使う</div>`,
-      listen: `<div class="nds-qq">🎧 聞き取り：前後の文も流します。何と言ったか思い出してから答えを見よう（字幕は隠れます）</div>` +
-        '<div class="nds-qbtns"><button class="nds-qplay">▶ 再生</button></div>',
-      card: `<div class="nds-qq"><b>${esc(s.head)}</b> の意味は？</div><div class="nds-ql">${line}</div>`,
+      blank: `<div class="nds-qq">${L('空欄に入る語は？', 'Which word fills the blank?')}</div><div class="nds-ql">${line.replace(wordRe(s.head, 'i'), '<b>＿＿＿</b>')}</div>`,
+      meaning: `<div class="nds-qq">${L(`この文での <b>${esc(s.head)}</b> の意味は？`, `What does <b>${esc(s.head)}</b> mean here?`)}</div><div class="nds-ql">${line.replace(wordRe(s.head, 'i'), '<b>$1</b>')}</div>`,
+      ja2en: `<div class="nds-qq">${L('英語で言ってみよう（頭の中か声に出して）', 'Say it in English (in your head or out loud)')}</div><div class="nds-ql">${esc(s.ja)}</div>` +
+        `<div class="nds-cx">${L(`ヒント：「${esc(meaningOf(s))}」にあたる語句を使う`, `Hint: use the phrase for “${esc(meaningOf(s))}”`)}</div>`,
+      listen: `<div class="nds-qq">${L('🎧 聞き取り：前後の文も流します。何と言ったか思い出してから答えを見よう（字幕は隠れます）', '🎧 Listening: the lines around it play too. Recall what was said, then check (subtitles are hidden)')}</div>` +
+        `<div class="nds-qbtns"><button class="nds-qplay">${L('▶ 再生', '▶ Play')}</button></div>`,
+      card: `<div class="nds-qq">${L(`<b>${esc(s.head)}</b> の意味は？`, `What does <b>${esc(s.head)}</b> mean?`)}</div><div class="nds-ql">${line}</div>`,
     }[kind];
     quizBox.innerHTML = head + `<div class="nds-qcard">${q}` +
       (choices
         ? `<div class="nds-qch">${choices.map((c, i) => `<button class="nds-qc" data-i="${i}">${esc(kind === 'blank' ? c.head : meaningOf(c))}</button>`).join('')}</div>`
-        : '<button class="nds-qshow">答えを見る</button>') +
+        : `<button class="nds-qshow">${L('答えを見る', 'Show the answer')}</button>`) +
       '<div class="nds-qa" hidden></div></div>';
     setPoolSelect();
     if (kind === 'listen') playScene(s);
@@ -955,16 +978,16 @@
       : '';
     const a = $('.nds-qa', quizBox);
     a.hidden = false;
-    a.innerHTML = (correct === null ? '' : `<div class="${correct ? 'nds-ok' : 'nds-ng'}">${correct ? '正解！' : '残念…'}</div>`) + scene +
-      `<div><b>${esc(s.head)}</b>：${esc(meaningOf(s))}</div>` +
-      (info ? `<div class="nds-ci"><span class="nds-cl">使われ方</span>${esc(info.usage)}</div>` +
-        (info.toSuperior ? `<div class="nds-ci"><span class="nds-cl">使える相手</span>${audienceHtml(info)}</div>` : '') +
-        `<div class="nds-ci"><span class="nds-cl">例</span>${info.exampleTo ? `<span class="nds-to">&lt;${esc(info.exampleTo)}&gt;</span> ` : ''}${esc(info.example)}<div class="nds-cx">${esc(info.exampleJa)}</div></div>` : '') +
-      (s.ja && !scene ? `<div class="nds-ci"><span class="nds-cl">訳</span>${esc(s.ja)}</div>` : '') +
-      `<div class="nds-qbtns">${kind === 'listen' ? '<button class="nds-qplay">▶ もう一度聞く</button>' : s.time != null ? '<button class="nds-qgo">▶ この場面を見る</button>' : ''}` +
-      (correct === null ? `<button class="nds-qself" data-ok="1">${kind === 'card' ? '覚えてた' : kind === 'listen' ? '聞き取れた' : '言えた'}</button>` +
-        `<button class="nds-qself" data-ok="0">${kind === 'card' ? '忘れてた' : kind === 'listen' ? '聞き取れなかった' : '言えなかった'}</button>` : '') +
-      '<button class="nds-qnext">次へ</button></div>';
+    a.innerHTML = (correct === null ? '' : `<div class="${correct ? 'nds-ok' : 'nds-ng'}">${correct ? L('正解！', 'Correct!') : L('残念…', 'Not quite…')}</div>`) + scene +
+      `<div><b>${esc(s.head)}</b>${L('：', ': ')}${esc(meaningOf(s))}</div>` +
+      (info ? `<div class="nds-ci"><span class="nds-cl">${L('使われ方', 'Usage')}</span>${esc(info.usage)}</div>` +
+        (info.toSuperior ? `<div class="nds-ci"><span class="nds-cl">${L('使える相手', 'Say it to')}</span>${audienceHtml(info)}</div>` : '') +
+        `<div class="nds-ci"><span class="nds-cl">${L('例', 'Example')}</span>${info.exampleTo ? `<span class="nds-to">&lt;${esc(toLabel(info.exampleTo))}&gt;</span> ` : ''}${esc(info.example)}<div class="nds-cx">${esc(info.exampleJa)}</div></div>` : '') +
+      (s.ja && !scene ? `<div class="nds-ci"><span class="nds-cl">${L('訳', 'Translation')}</span>${esc(s.ja)}</div>` : '') +
+      `<div class="nds-qbtns">${kind === 'listen' ? `<button class="nds-qplay">${L('▶ もう一度聞く', '▶ Listen again')}</button>` : s.time != null ? `<button class="nds-qgo">${L('▶ この場面を見る', '▶ Watch the scene')}</button>` : ''}` +
+      (correct === null ? `<button class="nds-qself" data-ok="1">${kind === 'card' ? L('覚えてた', 'I knew it') : kind === 'listen' ? L('聞き取れた', 'I got it') : L('言えた', 'I said it')}</button>` +
+        `<button class="nds-qself" data-ok="0">${kind === 'card' ? L('忘れてた', 'I forgot') : kind === 'listen' ? L('聞き取れなかった', "I didn't catch it") : L('言えなかった', "I couldn't")}</button>` : '') +
+      `<button class="nds-qnext">${L('次へ', 'Next')}</button></div>`;
   }
   quizBox.addEventListener('change', e => {
     if (!e.target.closest('.nds-qpool')) return;
@@ -1008,7 +1031,7 @@
     if (key === 'p') return togglePanel();
     // check your understanding: show this line's Japanese (also under the video) until the next line
     if (key === 'j') return root.classList.toggle('nds-reveal');
-    if (key === 'q') { S.settings.autoPause = !S.settings.autoPause; saveSettings(); applySettings(); flash(S.settings.autoPause ? '自動一時停止 ON' : '自動一時停止 OFF'); return; }
+    if (key === 'q') { S.settings.autoPause = !S.settings.autoPause; saveSettings(); applySettings(); flash(S.settings.autoPause ? L('自動一時停止 ON', 'Pause after each line: ON') : L('自動一時停止 OFF', 'Pause after each line: OFF')); return; }
     if (!S.cues.length) return;
     const t = nowMs(), cur = S.idx >= 0 ? S.idx : Math.max(0, currentIndex(t)); // the line shown
     const v = video();
@@ -1033,7 +1056,7 @@
   function setRepeat(k) {
     S.repeat = k;
     root.classList.toggle('nds-repeating', k >= 0);
-    flash(k >= 0 ? 'この文をリピート（R でやめる）' : 'リピート OFF');
+    flash(k >= 0 ? L('この文をリピート（R でやめる）', 'Repeating this line (R to stop)') : L('リピート OFF', 'Repeat: OFF'));
   }
 
   function flash(msg) {
@@ -1043,9 +1066,11 @@
 
   chrome.storage.local.get(['nds_settings', 'nds_saved', 'nds_ai'], r => {
     Object.assign(S.settings, r.nds_settings || {});
+    if (!(r.nds_settings && r.nds_settings.lang)) S.settings.lang = N.guessLang(navigator.language); // first start
     S.saved = r.nds_saved || [];
     refreshSavedWords();
     setAi(r.nds_ai);
+    applyUiLang();
     applySettings(); applyJaMode();
   });
   applySettings();

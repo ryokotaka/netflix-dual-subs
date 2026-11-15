@@ -207,7 +207,79 @@
     return best;
   }
 
-  const api = { parseVTT, parseTTML, parseSubtitles, alignCues, tokenize, lemmas, lookupWord, lookupPhrase, cleanText, stripSdh };
+  // ---------- the learner's language ----------
+  // Subtitles are translated into it and the AI explains in it. The UI is Japanese for
+  // Japanese and English for everyone else. [native name, English name]
+  const LANGS = {
+    ja: ['日本語', 'Japanese'], ko: ['한국어', 'Korean'], 'zh-CN': ['简体中文', 'Simplified Chinese'],
+    'zh-TW': ['繁體中文', 'Traditional Chinese'], es: ['Español', 'Spanish'], pt: ['Português', 'Portuguese'],
+    fr: ['Français', 'French'], de: ['Deutsch', 'German'], it: ['Italiano', 'Italian'], ru: ['Русский', 'Russian'],
+    uk: ['Українська', 'Ukrainian'], pl: ['Polski', 'Polish'], tr: ['Türkçe', 'Turkish'], ar: ['العربية', 'Arabic'],
+    hi: ['हिन्दी', 'Hindi'], id: ['Bahasa Indonesia', 'Indonesian'], vi: ['Tiếng Việt', 'Vietnamese'], th: ['ไทย', 'Thai'],
+  };
+  const langCode = l => (LANGS[l] ? l : 'ja');
+  const chromeLang = l => ({ 'zh-CN': 'zh', 'zh-TW': 'zh-Hant' }[l] || l); // Chrome's Translator / Prompt API
+  const netflixLang = l => ({ 'zh-CN': 'zh-hans', 'zh-TW': 'zh-hant' }[l] || l); // start of Netflix's track codes
+  // From the browser's language, for a first start (English speakers get Japanese, the original)
+  function guessLang(nav) {
+    const n = String(nav || '');
+    if (/^zh/i.test(n)) return /TW|HK|MO|Hant/i.test(n) ? 'zh-TW' : 'zh-CN';
+    const base = n.split('-')[0].toLowerCase();
+    return LANGS[base] ? base : 'ja';
+  }
+
+  // ---------- word explanations: one schema for Claude, Gemini and Chrome's model ----------
+  // The model fills the fields in this order, so who-can-you-say-it-to and the example's
+  // audience are decided before the example is written. The ratings are about the phrase
+  // itself (if you said it), not about this scene, which is usually casual.
+  const AUDIENCE = ['◎', '○', '△', '×'];
+  const EXAMPLE_TO_JA = ['友人に', '同僚に', '上司に', '誰でも'];
+  const EXAMPLE_TO_EN = ['friend', 'colleague', 'boss', 'anyone'];
+  function lmSchema(l) {
+    const enumOf = { toFriend: AUDIENCE, toColleague: AUDIENCE, toSuperior: AUDIENCE,
+      exampleTo: langCode(l) === 'ja' ? EXAMPLE_TO_JA : EXAMPLE_TO_EN };
+    const fields = ['meaning', 'usage', 'toFriend', 'toColleague', 'toSuperior', 'pattern', 'exampleTo', 'example', 'exampleJa'];
+    return {
+      type: 'object',
+      properties: Object.fromEntries(fields.map(k => [k, enumOf[k] ? { type: 'string', enum: enumOf[k] } : { type: 'string' }])),
+      required: fields,
+      additionalProperties: false,
+    };
+  }
+  const geminiSchema = s => ({ // Gemini's schema dialect
+    type: 'OBJECT',
+    properties: Object.fromEntries(s.required.map(k => [k, s.properties[k].enum ? { type: 'STRING', enum: s.properties[k].enum } : { type: 'STRING' }])),
+    required: s.required,
+    propertyOrdering: s.required,
+  });
+  function lmSystem(l) {
+    if (langCode(l) === 'ja') {
+      return 'あなたは日本人の英語学習者を助ける先生です。英語の字幕の1文（前後の文つき）と、その中の単語または熟語が与えられます。' +
+        'その語を学ぶのに役立つ情報を答えてください。' +
+        'meaning: この文での意味（日本語、20文字以内）。usage: この場面での使われ方・ニュアンス・話し手の気持ち（日本語、60文字以内）。' +
+        'toFriend / toColleague / toSuperior: この場面に関係なく、この意味でのこの言い方を学習者自身が友人／同僚／上司など目上に言ってよいか' +
+        '（◎自然 ○使える △避けた方が無難 ×失礼・不適切）。' +
+        'pattern: よく使う形やコロケーション（英語、～で可変部分）。' +
+        'exampleTo: 例文を言う相手。toFriend / toColleague / toSuperior で◎か○の相手から選ぶ（どの相手にも自然なら 誰でも）。' +
+        'example: patternを使い、exampleTo の相手に言う短く自然な英語の例文。exampleJa: その日本語訳。';
+    }
+    const name = LANGS[l][1];
+    return `You are a teacher helping a ${name} speaker learn English. You get one line of English subtitles (with the lines around it) and a word or phrase in it. ` +
+      'Answer with what helps them learn it. ' +
+      `meaning: what it means in this line (in ${name}, a few words). usage: how it is used here: the nuance and the speaker's feeling (in ${name}, one short sentence). ` +
+      'toFriend / toColleague / toSuperior: regardless of this scene, could the learner themself say this, in this sense, to a friend / a colleague / a boss or someone senior ' +
+      '(◎ natural, ○ fine, △ better avoided, × rude or inappropriate). ' +
+      'pattern: a common form or collocation (in English, ~ for the part that changes). ' +
+      'exampleTo: who the example is said to, chosen from those rated ◎ or ○ (anyone, if it is natural with everyone). ' +
+      `example: a short, natural English example using the pattern, said to exampleTo. exampleJa: its ${name} translation.`;
+  }
+  function contextPrompt(l, prev, line, next, target) {
+    const [p, c, n, t] = langCode(l) === 'ja' ? ['前の文', '文', '次の文', '対象'] : ['Previous line', 'Line', 'Next line', 'Target'];
+    return (prev ? `${p}: ${prev}\n` : '') + `${c}: ${line}\n` + (next ? `${n}: ${next}\n` : '') + `${t}: ${target}`;
+  }
+
+  const api = { parseVTT, parseTTML, parseSubtitles, alignCues, tokenize, lemmas, lookupWord, lookupPhrase, cleanText, stripSdh,
+    LANGS, langCode, chromeLang, netflixLang, guessLang, lmSchema, geminiSchema, lmSystem, contextPrompt, EXAMPLE_TO_EN };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.NDS = api;
 })(typeof self !== 'undefined' ? self : this);

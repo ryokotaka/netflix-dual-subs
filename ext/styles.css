@@ -89,6 +89,10 @@ html.nds-hide-nf .player-timedtext { opacity: 0 !important; }
 .nds-head button.on { color: var(--nds-text) !important; box-shadow: inset 0 -2px 0 var(--nds-accent); }
 .nds-head button:hover { background: rgba(255,255,255,.06); }
 .nds-sp { flex: 1; }
+.nds-gear, .nds-close { flex: none; }
+/* English tab names are longer: tighter tabs so ⚙ and ✕ stay inside the panel */
+#nds-root:lang(en) .nds-head { gap: 0; padding: 8px 4px; }
+#nds-root:lang(en) .nds-head button { padding: 6px 5px; font-size: 13px; }
 .nds-settings { padding: 10px 14px; border-bottom: 1px solid var(--nds-line); display: grid; gap: 6px; }
 .nds-settings[hidden] { display: none; }
 .nds-settings label { display: flex; gap: 8px; align-items: center; cursor: pointer; }
