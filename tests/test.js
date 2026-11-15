@@ -25,6 +25,6 @@ const en=[{start:1000,end:3500,text:'a'},{start:5000,end:6000,text:'b'},{start:9
 const ja=[{start:900,end:3400,text:'あ'},{start:4900,end:6100,text:'い'}];
 console.log(JSON.stringify(N.alignCues(en, ja)));
 // closed-caption cleanup
-for (const s of ['[indistinct chattering, giggling]', '-[Ginny] What, Mom?\n-Is there a hair?', '-Hey!\n-[sighs]',
-  '♪ Go down, go down ♪', 'NORAH: Girl, you gotta blend!', 'Ugh! (laughs) Jesus, hang on!', "I'm fine.", '[Georgia] No!'])
+for (const s of ['[indistinct chattering, giggling]', '-[Maya] What, Dad?\n-Is something wrong?', '-Hey!\n-[sighs]',
+  '♪ La la la, la la ♪', 'SAM: We need a backup plan.', 'Ugh! (laughs) Okay, hang on!', "I'm fine.", '[Alex] No!'])
   console.log(JSON.stringify(s), '→', JSON.stringify(N.stripSdh(s)));

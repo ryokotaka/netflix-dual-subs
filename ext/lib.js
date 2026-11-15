@@ -16,7 +16,7 @@
   }
 
   // Closed captions also carry sound descriptions ("[sighs]", "(laughs)"), speaker
-  // labels ("[Ginny] What?", "NORAH: Hi") and song lyrics ("♪ Go down ♪").
+  // labels ("[Maya] What?", "SAM: Hi") and song lyrics ("♪ La la ♪").
   // Keeps only the spoken words; '' when nothing is left.
   function stripSdh(text) {
     const lines = text.split('\n').map(line => {

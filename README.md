@@ -98,7 +98,7 @@ options.html / options.js     settings page: keys, usage log, backup / restore
   (plays the scene with subtitles hidden).
 - Keys: <kbd>J</kbd> show the translation · <kbd>Q</kbd> pause after each line · <kbd>P</kbd> panel.
   Matched by physical key, so they work with a Japanese IME on.
-- Sound effects, speaker names and lyrics (`[sighs]`, `NORAH:`, `♪…♪`) are hidden.
+- Sound effects, speaker names and lyrics (`[sighs]`, `SAM:`, `♪…♪`) are hidden.
 - Without any key: the dictionary is built in, and word explanations run on Chrome's
   on-device AI (Gemini Nano) where your Chrome supports it (and your language).
 - With a key: Claude Haiku 5.5 (Claude API key), else Gemini (Gemini API key). Keys go in the
