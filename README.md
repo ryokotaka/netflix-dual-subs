@@ -92,9 +92,8 @@ options.html / options.js     settings page: keys, usage log, backup / restore
 - Keys: <kbd>J</kbd> show Japanese · <kbd>Q</kbd> pause after each line · <kbd>P</kbd> panel.
   Matched by physical key, so they work with a Japanese IME on.
 - Sound effects, speaker names and lyrics (`[sighs]`, `NORAH:`, `♪…♪`) are hidden.
-- Without any key: translation uses Google Translate's free web endpoint (falling back to
-  Chrome's on-device translator), the dictionary is built in, and word explanations run on
-  Chrome's on-device AI (Gemini Nano) where your Chrome supports it.
+- Without any key: the dictionary is built in, and word explanations run on Chrome's
+  on-device AI (Gemini Nano) where your Chrome supports it.
 - With a key: Claude Haiku 5.5 (Claude API key), else Gemini (Gemini API key). Keys go in the
   extension's options page.
 
@@ -116,6 +115,5 @@ Debug logs in DevTools are prefixed with `[NDS]`.
 
 </details>
 
-Translation uses Google Translate's free, unofficial endpoint, falling back to Chrome's built-in
-`Translator` API. Dictionary data: EJDict (CC0) and Open Multilingual Wordnet; see
+Dictionary data: EJDict (CC0) and Open Multilingual Wordnet; see
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Code: [MIT](LICENSE).
